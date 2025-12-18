@@ -9,7 +9,7 @@
 
 # Topic generation - creates a graph of related topics
 topics:
-  prompt: "Python programming fundamentals"
+  prompt: "Quantum computing basics"
   mode: graph
   system_prompt: ""
   depth: 3         # Graph depth
@@ -18,14 +18,14 @@ topics:
 
   # LLM configuration for topic graph generation
   llm:
-    provider: "gemini"
-    model: "gemini-2.5-flash-lite"
+    provider: "anthropic"
+    model: "claude-opus-4-5-20251101"
     temperature: 0.8
 
 # Data generation - creates the actual training examples
 generation:
-  system_prompt: "Generate clear, educational Q&A pairs about Python programming."
-  instructions: "Create diverse questions and detailed answers suitable for learning Python."
+  system_prompt: "Generate clear, educational Q&A pairs about Quantum computing."
+  instructions: "Create diverse questions and detailed answers suitable for learning Quantum computing."
 
   # Conversation configuration
   conversation:
@@ -35,8 +35,8 @@ generation:
 
   # LLM configuration for generation
   llm:
-    provider: "gemini"
-    model: "gemini-2.5-flash-lite"
+    provider: "anthropic"
+    model: "claude-opus-4-5-20251101"
     temperature: 0.7
 
 # Output configuration
@@ -48,4 +48,4 @@ output:
   include_system_message: true
   num_samples: 4       # Number of examples to generate
   batch_size: 3        # Parallel generation batch size
-  save_as: "basic-dataset.jsonl"
+  save_as: "quantum-dataset.jsonl"

@@ -19,7 +19,7 @@ topics:
   # LLM configuration for topic graph generation
   llm:
     provider: "gemini"
-    model: "gemini-2.5-flash-lite"
+    model: "gemini-2.5-flash"
     temperature: 0.8
 
 # Data generation - creates the actual training examples
@@ -36,7 +36,7 @@ generation:
   # LLM configuration for generation
   llm:
     provider: "gemini"
-    model: "gemini-2.5-flash-lite"
+    model: "gemini-2.5-flash"
     temperature: 0.7
 
 # Output configuration
