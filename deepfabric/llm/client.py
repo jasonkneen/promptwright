@@ -298,9 +298,7 @@ class LLMClient:
                         stream_error.append(e)
                     finally:
                         # Signal completion
-                        asyncio.run_coroutine_threadsafe(
-                            queue.put(None), asyncio.get_event_loop()
-                        )
+                        asyncio.run_coroutine_threadsafe(queue.put(None), asyncio.get_event_loop())
 
                 # Start producer in background thread
                 loop = asyncio.get_event_loop()
@@ -318,7 +316,9 @@ class LLMClient:
                 if stream_error:
                     raise DataSetGeneratorError(
                         f"Streaming generation failed in producer: {stream_error[0]}",
-                        context={"raw_content": "".join(accumulated_text) if accumulated_text else None},
+                        context={
+                            "raw_content": "".join(accumulated_text) if accumulated_text else None
+                        },
                     ) from stream_error[0]
             else:
                 # True async streaming
@@ -878,8 +878,6 @@ def _strip_additional_properties(schema_dict: dict) -> dict:
     return schema_dict
 
 
-
-
 def _ensure_anthropic_strict_mode_compliance(schema_dict: dict) -> dict:
     """Ensure schema complies with Anthropic's structured outputs requirements.
 
@@ -1203,5 +1201,3 @@ def make_async_outlines_model(provider: str, model_name: str, **kwargs) -> Any |
     # Outlines does not currently expose async structured generation wrappers
     # for the remaining providers. Fallback to synchronous execution later.
     return None
-
-
