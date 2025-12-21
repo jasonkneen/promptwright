@@ -1,5 +1,7 @@
 import asyncio
+import logging
 import os
+import sys
 
 from functools import lru_cache
 from typing import Any
@@ -20,6 +22,8 @@ from .rate_limit_config import (
     get_default_rate_limit_config,
 )
 from .retry_handler import RetryHandler, retry_with_backoff, retry_with_backoff_async
+
+logger = logging.getLogger(__name__)
 
 # JSON Schema union type keys that need recursive processing
 _UNION_KEYS = ("anyOf", "oneOf", "allOf")
@@ -1061,8 +1065,18 @@ def _get_cached_openai_schema(schema: type[BaseModel]) -> type[BaseModel]:
     OpenAICompatModel.__name__ = f"{schema.__name__}OpenAICompat"
     OpenAICompatModel.__doc__ = schema.__doc__
 
-    # Rebuild model to resolve forward references (e.g., PendingToolCall in AgentStep)
-    OpenAICompatModel.model_rebuild()
+    # Rebuild model with the schema's original module namespace to resolve
+    # forward references (e.g., PendingToolCall in AgentStep)
+    schema_module = sys.modules.get(schema.__module__)
+    if schema_module:
+        OpenAICompatModel.model_rebuild(_types_namespace=vars(schema_module))
+    else:
+        logger.warning(
+            "Could not find module '%s' in sys.modules. "
+            "Forward reference resolution for dynamically created models may fail.",
+            schema.__module__,
+        )
+        OpenAICompatModel.model_rebuild()
 
     return OpenAICompatModel
 
