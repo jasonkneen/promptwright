@@ -42,7 +42,7 @@ What sets DeepFabric apart from other dataset generation tools is its ability to
 
 <img src="/assets/df-demo.gif" width="100%" height="100%"/>
 
-Constrained decoding and response validation, along with real tool executions within isolated webassembly environments, ensure that generated samples strictly adhere to structured schema, variable constraints, and execution correctness, ensuring datasets have exact syntax and structure for use in model training pipelines. Tool definations can be either directly imported from MCP (Model Context Protocol) server schemas and automatically mocked, real life interfaces along with a standard set of common tools (`list_files()`, 'read_file()` etc)
+Constrained decoding and response validation, along with real tool executions within isolated webassembly environments, ensure that generated samples strictly adhere to structured schema, variable constraints, and execution correctness, ensuring datasets have exact syntax and structure for use in model training pipelines. Tool definations can be either directly imported from MCP (Model Context Protocol) server schemas and automatically mocked, real life interfaces along with a standard set of common tools (`list_files()`, `'read_file()` etc)
 
 Once your dataset is generated, it can be automatically uploaded to Hugging Face and directly imported into popular training frameworks like TRL, Unsloth, and Axolotl. 
 
