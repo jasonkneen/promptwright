@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 
 from typing import Any
 
@@ -36,9 +37,15 @@ class TransformersBackend(InferenceBackend):
         """
         super().__init__(config)
 
+        # Check if model is pre-loaded (not a string path)
+        is_preloaded = not isinstance(config.model, str)
+
         # Determine device
         if config.device:
             self.device = config.device
+        elif is_preloaded:
+            # Get device from pre-loaded model
+            self.device = str(next(config.model.parameters()).device)
         # Auto-detect best available device
         elif torch.cuda.is_available():
             self.device = "cuda"
@@ -48,7 +55,7 @@ class TransformersBackend(InferenceBackend):
             self.device = "cpu"
 
         # Determine dtype based on device
-        if self.device == "cuda":
+        if self.device == "cuda" or self.device.startswith("cuda:"):
             dtype = torch.float16
             device_map = "auto"
         elif self.device == "mps":
@@ -58,11 +65,36 @@ class TransformersBackend(InferenceBackend):
             dtype = torch.float32
             device_map = None
 
+        # Handle pre-loaded model case - skip all loading logic
+        if is_preloaded:
+            self.model = config.model
+            self.tokenizer = config.tokenizer
+            self.loaded_with_unsloth = False
+
+            # Detect architecture from pre-loaded model's config
+            self._architectures = []
+            if hasattr(self.model, "config"):
+                self._architectures = getattr(self.model.config, "architectures", []) or []
+
+            # Initialize tool call parser
+            self._tool_call_parser: ToolCallParser = get_parser(self._architectures)
+            logger.info(
+                "Using pre-loaded model with %s parser for architectures: %s",
+                type(self._tool_call_parser).__name__,
+                self._architectures or ["unknown"],
+            )
+
+            # Set padding token if not set
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+
+            return  # Skip remaining initialization
+
         # Detect model architecture for parser selection and tokenizer config
-        self._architectures: list[str] = []
+        self._architectures = []
         tokenizer_kwargs: dict[str, Any] = {}
         try:
-            model_config = AutoConfig.from_pretrained(config.model_path)  # nosec
+            model_config = AutoConfig.from_pretrained(config.model)  # nosec
             self._architectures = getattr(model_config, "architectures", []) or []
             if any(arch in MISTRAL_ARCHITECTURES for arch in self._architectures):
                 tokenizer_kwargs["fix_mistral_regex"] = True
@@ -71,7 +103,7 @@ class TransformersBackend(InferenceBackend):
             logger.warning("Could not detect model architecture: %s", e)
 
         # Initialize tool call parser based on detected architecture
-        self._tool_call_parser: ToolCallParser = get_parser(self._architectures)
+        self._tool_call_parser = get_parser(self._architectures)
         logger.info(
             "Using %s for model architectures: %s",
             type(self._tool_call_parser).__name__,
@@ -79,19 +111,44 @@ class TransformersBackend(InferenceBackend):
         )
 
         self.loaded_with_unsloth = False
-        # Load with Unsloth if requested
-        if config.use_unsloth:
+
+        # Detect if Unsloth has already patched the environment
+        # This happens when user imports unsloth in the same runtime
+        unsloth_patched = "unsloth" in sys.modules
+
+        # Use Unsloth if explicitly requested OR if Unsloth has patched the environment
+        # (to avoid "apply_qkv" errors from patched attention classes)
+        use_unsloth_loading = config.use_unsloth or unsloth_patched
+
+        if use_unsloth_loading:
             try:
                 from unsloth import FastLanguageModel  # type: ignore # noqa: PLC0415
 
-                # Load from adapter path if provided, otherwise from model_path
-                load_path = config.adapter_path if config.adapter_path else config.model_path
-                self.model, self.tokenizer = FastLanguageModel.from_pretrained(
-                    model_name=load_path,
-                    max_seq_length=config.max_seq_length,
-                    dtype=dtype,
-                    load_in_4bit=config.load_in_4bit,
-                )
+                if unsloth_patched and not config.use_unsloth:
+                    logger.info(
+                        "Unsloth detected in environment, using Unsloth loader for compatibility"
+                    )
+
+                if config.adapter_path:
+                    # Load base model first, then apply adapter
+                    self.model, self.tokenizer = FastLanguageModel.from_pretrained(
+                        model_name=config.model,
+                        max_seq_length=config.max_seq_length,
+                        dtype=dtype,
+                        load_in_4bit=config.load_in_4bit,
+                    )
+                    # Load LoRA adapter using PEFT
+                    from peft import PeftModel  # noqa: PLC0415
+
+                    self.model = PeftModel.from_pretrained(self.model, config.adapter_path)
+                else:
+                    # Load merged model or base model directly
+                    self.model, self.tokenizer = FastLanguageModel.from_pretrained(
+                        model_name=config.model,
+                        max_seq_length=config.max_seq_length,
+                        dtype=dtype,
+                        load_in_4bit=config.load_in_4bit,
+                    )
                 FastLanguageModel.for_inference(self.model)
                 self.loaded_with_unsloth = True
             except ImportError:
@@ -104,11 +161,11 @@ class TransformersBackend(InferenceBackend):
         # Standard transformers/PEFT loading
         if not self.loaded_with_unsloth:
             self.tokenizer = AutoTokenizer.from_pretrained(  # nosec
-                config.model_path, **tokenizer_kwargs
+                config.model, **tokenizer_kwargs
             )
 
             self.model = AutoModelForCausalLM.from_pretrained(  # nosec
-                config.model_path,
+                config.model,
                 device_map=device_map,
                 dtype=dtype,
             )

@@ -1,9 +1,9 @@
 """Model inference interfaces and implementations for evaluation."""
 
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from ..schemas import ToolDefinition
 
@@ -11,16 +11,39 @@ from ..schemas import ToolDefinition
 class InferenceConfig(BaseModel):
     """Configuration for model inference."""
 
-    model_path: str = Field(
-        description="Path to model (local path or HuggingFace Hub ID)",
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    model: str | Any = Field(
+        description="Model identifier (local path, HuggingFace Hub ID, or model name for cloud providers). "
+        "Can also be a pre-loaded model object to avoid reloading.",
+    )
+    tokenizer: Any | None = Field(
+        default=None,
+        description="Pre-loaded tokenizer object. Required when model is a pre-loaded model object.",
     )
     adapter_path: str | None = Field(
         default=None,
         description="Path to PEFT/LoRA adapter (if using adapter-based fine-tuning)",
     )
-    backend: Literal["transformers", "ollama"] = Field(
+    backend: Literal["transformers", "ollama", "llm"] = Field(
         default="transformers",
         description="Inference backend to use",
+    )
+    provider: Literal["openai", "anthropic", "gemini", "openrouter"] | None = Field(
+        default=None,
+        description="Cloud LLM provider (required when backend='llm')",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="API key for the provider (falls back to environment variable if not set)",
+    )
+    base_url: str | None = Field(
+        default=None,
+        description="Custom base URL for the API (e.g., for OpenRouter or proxies)",
+    )
+    rate_limit_config: dict | None = Field(
+        default=None,
+        description="Rate limiting configuration overrides",
     )
     use_unsloth: bool = Field(
         default=False,
@@ -61,6 +84,51 @@ class InferenceConfig(BaseModel):
         ge=1,
         description="Batch size for inference",
     )
+
+    @field_serializer("model")
+    def serialize_model(self, value: str | Any) -> str:
+        """Serialize model field - convert objects to descriptive string."""
+        if isinstance(value, str):
+            return value
+        # For in-memory model objects, return a descriptive string
+        model_class = type(value).__name__
+        model_name = getattr(getattr(value, "config", None), "name_or_path", "unknown")
+        return f"<in-memory:{model_class}:{model_name}>"
+
+    @field_serializer("tokenizer")
+    def serialize_tokenizer(self, value: Any | None) -> str | None:
+        """Serialize tokenizer field - convert objects to descriptive string."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        # For in-memory tokenizer objects, return a descriptive string
+        tokenizer_class = type(value).__name__
+        tokenizer_name = getattr(value, "name_or_path", "unknown")
+        return f"<in-memory:{tokenizer_class}:{tokenizer_name}>"
+
+    @model_validator(mode="after")
+    def validate_config(self) -> "InferenceConfig":
+        """Validate configuration consistency."""
+        # Ensure provider is set when using LLM backend
+        if self.backend == "llm" and self.provider is None:
+            msg = "provider must be specified when backend='llm'"
+            raise ValueError(msg)
+
+        # Check if model is a pre-loaded object (not a string path)
+        is_preloaded_model = not isinstance(self.model, str)
+
+        # If model is pre-loaded, tokenizer must also be provided
+        if is_preloaded_model and self.tokenizer is None:
+            msg = "tokenizer must be provided when using a pre-loaded model object"
+            raise ValueError(msg)
+
+        # Pre-loaded models only work with transformers backend
+        if is_preloaded_model and self.backend != "transformers":
+            msg = "pre-loaded model objects are only supported with backend='transformers'"
+            raise ValueError(msg)
+
+        return self
 
 
 class ModelResponse(BaseModel):
@@ -150,6 +218,10 @@ def create_inference_backend(config: InferenceConfig) -> InferenceBackend:
         from .backends.ollama_backend import OllamaBackend  # noqa: PLC0415
 
         return OllamaBackend(config)
+    if config.backend == "llm":
+        from .backends.llm_eval_backend import LLMEvalBackend  # noqa: PLC0415
+
+        return LLMEvalBackend(config)
 
     msg = f"Unsupported backend: {config.backend}"
     raise ValueError(msg)

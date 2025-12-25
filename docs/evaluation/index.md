@@ -18,7 +18,7 @@ from deepfabric.evaluation import Evaluator, EvaluatorConfig, InferenceConfig
 
 config = EvaluatorConfig(
     inference_config=InferenceConfig(
-        model_path="./output/checkpoint-final",
+        model="./output/checkpoint-final",
         backend="transformers",
     ),
 )
@@ -30,6 +30,25 @@ print(f"Tool Selection: {results.metrics.tool_selection_accuracy:.2%}")
 print(f"Parameter Accuracy: {results.metrics.parameter_accuracy:.2%}")
 print(f"Overall Score: {results.metrics.overall_score:.2%}")
 ```
+
+## Using In-Memory Models
+
+After training, pass the model directly without reloading from disk:
+
+```python
+# After training with SFTTrainer...
+FastLanguageModel.for_inference(model)
+
+config = EvaluatorConfig(
+    inference_config=InferenceConfig(
+        model=model,          # Pass model object directly
+        tokenizer=tokenizer,  # Required with in-memory model
+    ),
+)
+results = evaluator.evaluate(dataset=eval_dataset)
+```
+
+This avoids OOM errors and speeds up the train-evaluate workflow. See [Running Evaluation](running.md#using-in-memory-models) for details.
 
 ## What Gets Evaluated
 

@@ -304,8 +304,8 @@ class ToolDefinition(BaseModel):
         description = func.get("description", "")
         params_schema = func.get("parameters", {})
 
-        properties = params_schema.get("properties", {})
-        required_params = set(params_schema.get("required", []))
+        properties = params_schema.get("properties") or {}
+        required_params = set(params_schema.get("required") or [])
 
         parameters = []
         for param_name, param_props in properties.items():

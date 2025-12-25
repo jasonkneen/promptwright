@@ -36,12 +36,12 @@ class EvaluatorConfig(BaseModel):
         default=None,
         description="Path to save evaluation results",
     )
-    model_path: str | None = Field(
+    model: str | None = Field(
         default=None,
-        description="Path to model to evaluate (overrides inference_config.model_path)",
+        description="Model to evaluate (overrides inference_config.model)",
     )
     inference_config: InferenceConfig = Field(
-        description="Inference backend configuration (includes model_path)",
+        description="Inference backend configuration (includes model)",
     )
     batch_size: int = Field(
         default=1,
@@ -119,7 +119,7 @@ class Evaluator:
             "evaluator_created",
             {
                 "backend": self.config.inference_config.backend,
-                "model_path": self.config.inference_config.model_path,
+                "model": self.config.inference_config.model,
                 "has_adapter": self.config.inference_config.adapter_path is not None,
                 "evaluators": (
                     list(self.config.evaluators)
@@ -434,6 +434,7 @@ class Evaluator:
                 ground_truth=ground_truth,
                 response=response,
                 evaluator_results=evaluator_results,
+                tools=tools,
             )
 
         except Exception as e:  # noqa: BLE001
@@ -442,8 +443,9 @@ class Evaluator:
             expected_tool = None
             expected_params: dict[str, Any] = {}
             expected_answer = None
+            available_tool_names: list[str] = []
 
-            # Try to extract ground truth if available
+            # Try to extract ground truth and tools if available
             try:
                 gt = self.extract_ground_truth(sample)
                 query = gt.query
@@ -453,9 +455,16 @@ class Evaluator:
             except (KeyError, AttributeError, ValidationError):
                 pass
 
+            try:
+                tools = self.prepare_tools(sample)
+                available_tool_names = [t.name for t in tools]
+            except (KeyError, AttributeError, ValidationError):
+                pass
+
             return SampleEvaluation(
                 sample_id=sample_id,
                 query=query,
+                available_tools=available_tool_names,
                 expected_tool=expected_tool,
                 predicted_tool=None,
                 expected_parameters=expected_params,
@@ -560,6 +569,7 @@ class Evaluator:
                 ground_truth=ground_truth,
                 predicted_tool_calls=all_predicted_tool_calls,
                 final_content=final_content,
+                tools=tools,
             )
 
         except Exception as e:  # noqa: BLE001
@@ -568,6 +578,7 @@ class Evaluator:
             expected_tool = None
             expected_params: dict[str, Any] = {}
             expected_answer = None
+            available_tool_names: list[str] = []
 
             try:
                 gt = self.extract_ground_truth(sample)
@@ -578,9 +589,16 @@ class Evaluator:
             except (KeyError, AttributeError, ValidationError):
                 pass
 
+            try:
+                tools = self.prepare_tools(sample)
+                available_tool_names = [t.name for t in tools]
+            except (KeyError, AttributeError, ValidationError):
+                pass
+
             return SampleEvaluation(
                 sample_id=sample_id,
                 query=query,
+                available_tools=available_tool_names,
                 expected_tool=expected_tool,
                 predicted_tool=None,
                 expected_parameters=expected_params,
@@ -600,6 +618,7 @@ class Evaluator:
         ground_truth: GroundTruth,
         predicted_tool_calls: list[dict],
         final_content: str,
+        tools: list[ToolDefinition] | None = None,
     ) -> SampleEvaluation:
         """Compute metrics for multi-turn evaluation.
 
@@ -610,6 +629,7 @@ class Evaluator:
             ground_truth: Expected values including all expected tools
             predicted_tool_calls: All tool calls made by model across turns
             final_content: Final model response content
+            tools: List of available tools for this sample
 
         Returns:
             SampleEvaluation with computed metrics
@@ -652,9 +672,13 @@ class Evaluator:
         # Execution valid if we got through the conversation
         execution_valid = len(predicted_tool_calls) > 0 or final_content != ""
 
+        # Extract tool names for available_tools field
+        available_tool_names = [t.name for t in tools] if tools else []
+
         return SampleEvaluation(
             sample_id=sample_id,
             query=ground_truth.query,
+            available_tools=available_tool_names,
             expected_tool=ground_truth.expected_tool,
             predicted_tool=first_predicted_tool,
             expected_parameters=ground_truth.expected_parameters,
@@ -714,6 +738,7 @@ class Evaluator:
         ground_truth: GroundTruth,
         response: ModelResponse,
         evaluator_results: list[EvaluatorResult],
+        tools: list[ToolDefinition] | None = None,
     ) -> SampleEvaluation:
         """Aggregate evaluator results into SampleEvaluation.
 
@@ -722,6 +747,7 @@ class Evaluator:
             ground_truth: Expected values
             response: Model response
             evaluator_results: Results from all evaluators
+            tools: List of available tools for this sample
 
         Returns:
             SampleEvaluation with aggregated metrics
@@ -746,10 +772,14 @@ class Evaluator:
                 params_correct = metrics.get("parameter_accuracy", 0.0) == 1.0
                 execution_valid = metrics.get("execution_valid", 0.0) == 1.0
 
+        # Extract tool names for available_tools field
+        available_tool_names = [t.name for t in tools] if tools else []
+
         # Return backwards-compatible SampleEvaluation
         return SampleEvaluation(
             sample_id=sample_id,
             query=ground_truth.query,
+            available_tools=available_tool_names,
             expected_tool=ground_truth.expected_tool,
             predicted_tool=predicted_tool,
             expected_parameters=ground_truth.expected_parameters,
@@ -780,12 +810,16 @@ class Evaluator:
         console.print("[bold blue]Running evaluation...[/bold blue]")
         evaluations = []
 
-        for idx, sample in tqdm(enumerate(samples), total=len(samples), desc="Evaluating"):
+        pbar = tqdm(enumerate(samples), total=len(samples), desc="Evaluating")
+        for idx, sample in pbar:
             eval_result = self.evaluate_sample(sample, idx)
             evaluations.append(eval_result)
 
             # Stream sample to reporters (for cloud real-time tracking)
             self.reporter.report_sample(eval_result)
+
+            # Force refresh for notebook compatibility
+            pbar.refresh()
 
         console.print("[bold green]Evaluation complete![/bold green]")
 
@@ -804,7 +838,7 @@ class Evaluator:
             "evaluation_completed",
             {
                 "backend": self.config.inference_config.backend,
-                "model_path": self.config.inference_config.model_path,
+                "model": self.config.inference_config.model,
                 "has_adapter": self.config.inference_config.adapter_path is not None,
                 "samples_evaluated": metrics.samples_evaluated,
                 "samples_processed": metrics.samples_processed,
