@@ -82,10 +82,8 @@ This generates a topic graph and creates 27 unique nodes, then generates 27 trai
 DeepFabric also uses YAML configuration with three main sections and optional shared LLM defaults
 
 > [!NOTE]  
-> The following configuration uses mocked tool execution in a wasm component, so will require a runing Spin service for which we provide a docker image. Run this before running deepfabric:
-```bash
-docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest`
-```
+> The following uses mocked tool execution, so will require a runing Spin service
+> run `§docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest ` to start the spin service locally.
 
 ```yaml
 # Optional: Shared LLM defaults (inherited by topics and generation)
@@ -126,17 +124,16 @@ generation:
   # Tool configuration (required for agent modes)
   tools:
     spin_endpoint: "http://localhost:3000"  # Spin service for tool execution
-    components:                 # Map component name to tool names
-      builtin:                  # Routes to /vfs/execute
-        - read_file
-        - write_file
-        - list_files
+    available:                  # Filter to specific tools (empty = all VFS tools)
+      - read_file
+      - write_file
+      - list_files
     max_per_query: 3            # Maximum tools per query
     max_agent_steps: 5          # Max ReAct reasoning iterations
 
-  max_retries: 3                # Retries for failed generations
-  sample_retries: 2             # Retries for validation failures
-  max_tokens: 2000              # Max tokens per generation
+    max_retries: 3                # Retries for failed generations
+    sample_retries: 2             # Retries for validation failures
+    max_tokens: 2000              # Max tokens per generation
 
   # Optional: Override shared LLM settings
   llm:
@@ -381,155 +378,6 @@ evaluator = Evaluator(config)
 results = evaluator.evaluate(dataset=eval_dataset)
 ```
 
-### Basic Usage with HuggingFace Trainer
-
-```python
-from transformers import Trainer, TrainingArguments
-from deepfabric import DeepFabricCallback
-
-# Set up training arguments
-training_args = TrainingArguments(
-    output_dir="./output",
-    num_train_epochs=3,
-    per_device_train_batch_size=4,
-    logging_steps=10,
-)
-
-# Create trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
-)
-
-# Add DeepFabric callback for metrics logging
-trainer.add_callback(DeepFabricCallback(trainer))
-
-# Train - metrics are automatically logged
-trainer.train()
-```
-
-### Usage with TRL SFTTrainer
-
-```python
-from trl import SFTTrainer, SFTConfig
-from deepfabric import DeepFabricCallback
-
-trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
-    train_dataset=train_dataset,
-    args=SFTConfig(
-        output_dir="./output",
-        num_train_epochs=3,
-        logging_steps=10,
-    ),
-)
-
-# Add callback - works with any Trainer-compatible class
-trainer.add_callback(DeepFabricCallback(trainer))
-trainer.train()
-```
-
-### Configuration Options
-
-```python
-from deepfabric import DeepFabricCallback
-
-callback = DeepFabricCallback(
-    trainer=trainer,                              # Optional: Trainer instance
-    api_key="your-api-key",                       # Or set DEEPFABRIC_API_KEY env var
-    endpoint="https://api.deepfabric.ai",         # Custom endpoint (optional)
-    enabled=True,                                 # Disable to skip logging
-)
-```
-
-### Environment Variables
-
-```bash
-# API key for authentication
-export DEEPFABRIC_API_KEY="your-api-key"
-
-# Custom API endpoint (optional)
-export DEEPFABRIC_API_URL="https://api.deepfabric.ai"
-```
-
-### Logged Metrics
-
-The callback automatically captures and logs:
-
-| Metric Type | Examples |
-|-------------|----------|
-| Training | `loss`, `learning_rate`, `epoch`, `global_step` |
-| Throughput | `train_runtime`, `train_samples_per_second` |
-| Evaluation | `eval_loss`, `eval_accuracy` (when evaluation is run) |
-| TRL-specific | `rewards/chosen`, `rewards/rejected`, `kl_divergence` |
-| Checkpoints | Checkpoint save events with step numbers |
-
-### Callback Events
-
-```python
-# The callback hooks into these Trainer events:
-# - on_train_begin: Logs run start with training configuration
-# - on_log: Logs training metrics (loss, lr, etc.)
-# - on_evaluate: Logs evaluation metrics
-# - on_save: Logs checkpoint events
-# - on_train_end: Logs run completion and flushes pending metrics
-```
-
-### Non-Blocking Design
-
-The callback uses a background thread to send metrics asynchronously, ensuring training is never blocked by network operations:
-
-```python
-from deepfabric.training import MetricsSender
-
-# Direct access to sender for advanced use cases
-sender = MetricsSender(
-    endpoint="https://api.deepfabric.ai",
-    api_key="your-key",
-    batch_size=10,        # Batch metrics before sending
-    flush_interval=5.0,   # Auto-flush every 5 seconds
-    max_queue_size=1000,  # Queue capacity
-)
-
-# Manually send metrics
-sender.send_metrics({"custom_metric": 0.95, "step": 100})
-
-# Flush pending metrics (blocking)
-sender.flush(timeout=30.0)
-
-# Check sender statistics
-print(sender.stats)
-# {'metrics_sent': 150, 'metrics_dropped': 0, 'send_errors': 0, 'queue_size': 0}
-```
-
-### Interactive API Key Prompt
-
-When running in an interactive environment (Jupyter notebook, terminal) without an API key configured, the callback will prompt for authentication:
-
-```python
-from deepfabric import DeepFabricCallback
-
-# If DEEPFABRIC_API_KEY is not set, prompts for login
-callback = DeepFabricCallback(trainer)
-# > DeepFabric API key not found. Log in to enable cloud metrics.
-# > Visit: https://app.deepfabric.ai/signup
-```
-
-### Disabling Metrics Logging
-
-```python
-# Disable via constructor
-callback = DeepFabricCallback(trainer, enabled=False)
-
-# Or set API key to None
-callback = DeepFabricCallback(trainer, api_key=None)
-
-# Or don't set DEEPFABRIC_API_KEY environment variable
-```
-
 ## Providers
 
 | Provider | Local/Cloud | Best For |
@@ -593,11 +441,10 @@ generation:
 
   tools:
     spin_endpoint: "http://localhost:3000"  # Spin service URL
-    components:                             # Map component to tool names
-      builtin:                              # Routes to /vfs/execute
-        - read_file
-        - write_file
-        - list_files
+    available:                              # Filter to specific tools
+      - read_file
+      - write_file
+      - list_files
     max_agent_steps: 5                      # Max ReAct iterations
 
     # Optional: Seed initial state for scenarios
