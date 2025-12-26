@@ -106,15 +106,20 @@ topics:
 # GENERATION: Create training samples from topics
 generation:
   system_prompt: |
-    You are an expert Python backend developer and technical educator.
+    You are an expert Python backend developer specializing in REST API design.
     Create practical, production-ready code examples with clear explanations.
     Include error handling, type hints, and follow PEP 8 conventions.
+    Use the following tools to read, write, and list files in the virtual filesystem:
+    - read_file
+    - write_file
+    - list_files
 
   # Additional instructions for sample generation
   instructions: |
-    Focus on real-world scenarios developers encounter daily.
+    Focus on real-world scenarios developers encounter daily when building REST APIs with Python.
     Include both happy path and edge case handling.
-    Provide context on when and why to use specific patterns.
+    Provide context on when and why to use specific patterns or libraries.
+    Ensure code is modular, testable, and maintainable.
 
   conversation:
     type: chain_of_thought      # basic | chain_of_thought
@@ -124,16 +129,51 @@ generation:
   # Tool configuration (required for agent modes)
   tools:
     spin_endpoint: "http://localhost:3000"  # Spin service for tool execution
-    available:                  # Filter to specific tools (empty = all VFS tools)
-      - read_file
-      - write_file
-      - list_files
+    components:                 # Map component name to tool names
+      builtin:                  # Routes to /vfs/execute
+        - read_file
+        - write_file
+        - list_files
     max_per_query: 3            # Maximum tools per query
     max_agent_steps: 5          # Max ReAct reasoning iterations
 
-    max_retries: 3                # Retries for failed generations
-    sample_retries: 2             # Retries for validation failures
-    max_tokens: 2000              # Max tokens per generation
+  # Optional: Seed initial files into the spin before generation, used for tool calling
+    scenario_seed:
+      files:
+        "Dockerfile": |
+          FROM python:3.13
+          WORKDIR /usr/local/app
+
+          # Install the application dependencies
+          COPY requirements.txt ./
+          RUN pip install --no-cache-dir -r requirements.txt
+
+          # Copy in the source code
+          COPY src ./src
+          EXPOSE 8080
+
+          # Setup an app user so the container doesn't run as the root user
+          RUN useradd app
+          USER app
+
+          CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+        "main.py": |
+          def greet(name):
+              return f"Hello, {name}!"
+
+          if __name__ == "__main__":
+              print(greet("World"))
+        "config.json": |
+          {
+            "version": "1.0.0",
+            "debug": true,
+            "max_retries": 3
+          }
+
+  # Generation control and retry settings
+  max_retries: 3                # Retries for failed generations
+  sample_retries: 2             # Retries for validation failures
+  max_tokens: 2000              # Max tokens per generation
 
   # Optional: Override shared LLM settings
   llm:
@@ -153,10 +193,10 @@ output:
   batch_size: 3                 # Parallel generation batch size
   save_as: "api-dataset.jsonl"
 
-# Optional: Upload to Hugging Face
-huggingface:
-  repository: "your-username/api-dataset-training-name"
-  tags: ["python", "programming"]
+ Optional: Upload to Hugging Face
+ huggingface:
+   repository: "your-username/api-dataset-training-name"
+   tags: ["python", "programming"]
 ```
 
 Run with:
