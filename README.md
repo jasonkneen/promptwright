@@ -82,8 +82,10 @@ This generates a topic graph and creates 27 unique nodes, then generates 27 trai
 DeepFabric also uses YAML configuration with three main sections and optional shared LLM defaults
 
 > [!NOTE]  
-> The following uses mocked tool execution, so will require a runing Spin service
-> run `§docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest ` to start the spin service locally.
+> The following configuration uses mocked tool execution in a wasm component, so will require a runing Spin service for which we provide a docker image. Run this before running deepfabric:
+```bash
+docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest`
+```
 
 ```yaml
 # Optional: Shared LLM defaults (inherited by topics and generation)
