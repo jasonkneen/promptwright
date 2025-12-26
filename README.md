@@ -84,7 +84,7 @@ DeepFabric also uses YAML configuration with three main sections and optional sh
 > [!NOTE]  
 > The following uses mocked tool execution, so will require a runing Spin service, which we provide in a docker image:
 ```bash
-docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest ` to start the spin service locally.
+docker run -d -p 3000:3000 ghcr.io/always-further/deepfabric/tools-sdk:latest`
 ```
 
 Save the following as `config.yaml`:
