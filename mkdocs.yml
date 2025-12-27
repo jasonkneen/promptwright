@@ -46,18 +46,18 @@ theme:
   icon:
     logo: material/robot-outline
   font:
-    text: Nunito
+    text: Inter
     code: Fira Code
   palette:
     - scheme: default
-      primary: indigo
-      accent: indigo
+      primary: white
+      accent: teal
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: black
+      accent: teal
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
