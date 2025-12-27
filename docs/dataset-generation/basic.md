@@ -123,5 +123,5 @@ Recommendations:
     --num-steps 2 --batch-size 2  (generates 4 samples)
     --num-steps 3 --batch-size 1  (generates 3 samples)
   • Or increase --depth (currently 2) or --degree (currently 2)
-  ```
+```
   
