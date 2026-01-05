@@ -4,11 +4,12 @@ import logging
 import re
 import secrets
 import string
+import warnings
 
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -796,15 +797,35 @@ class ReasoningTrace(BaseModel):
 class ToolContext(BaseModel):
     """Tool execution history - present when tools are used.
 
-    Note: available_tools has been removed as it was redundant with the
-    top-level 'tools' field in Conversation. Use 'tools' for the OpenAI-format
-    tool definitions needed by chat templates.
+    Note: available_tools has been deprecated in favor of the top-level 'tools'
+    field in Conversation. Use 'tools' for the OpenAI-format tool definitions
+    needed by chat templates. The field is kept here for backward compatibility
+    with existing datasets.
     """
 
     executions: list[ToolExecution] = Field(
         default_factory=list,
         description="Tool executions performed during the conversation (may be empty if agent answered without tools)",
     )
+    # Deprecated: kept for backward compatibility with existing datasets
+    available_tools: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Deprecated: Use top-level 'tools' field instead. Kept for backward compatibility.",
+    )
+
+    @model_validator(mode="after")
+    def warn_on_deprecated_available_tools(self) -> "ToolContext":
+        """Warn if the deprecated `available_tools` field is used."""
+        if self.available_tools is not None:
+            warnings.warn(
+                (
+                    "'tool_context.available_tools' is deprecated and will be removed in a future version. "
+                    "Use the top-level 'tools' field in Conversation instead."
+                ),
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return self
 
     class Config:
         extra = "forbid"
