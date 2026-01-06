@@ -2,13 +2,13 @@ import json
 import logging
 import sys
 
+from functools import cached_property
 from typing import Any
-
-import torch
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from ...schemas import ToolDefinition
+from ...utils import import_optional_dependency
 from ..inference import InferenceBackend, InferenceConfig, ModelResponse
 from .tool_call_parsers import ToolCallParser, get_parser
 
@@ -29,6 +29,30 @@ logger = logging.getLogger(__name__)
 class TransformersBackend(InferenceBackend):
     """Inference backend using HuggingFace Transformers."""
 
+    @cached_property
+    def _torch(self) -> Any:
+        """Dynamically import 'torch' and verify its availability.
+
+        Returns:
+            The imported torch module.
+
+        Raises:
+            ModuleNotFoundError: If 'torch' is not installed in the environment.
+        """
+        return import_optional_dependency("torch", "training")
+
+    @cached_property
+    def _peft(self) -> Any:
+        """Dynamically import 'peft' and verify its availability.
+
+        Returns:
+            The imported peft module.
+
+        Raises:
+            ModuleNotFoundError: If 'peft' is not installed in the environment.
+        """
+        return import_optional_dependency("peft", "training")
+
     def __init__(self, config: InferenceConfig):
         """Initialize Transformers backend.
 
@@ -47,22 +71,22 @@ class TransformersBackend(InferenceBackend):
             # Get device from pre-loaded model
             self.device = str(next(config.model.parameters()).device)
         # Auto-detect best available device
-        elif torch.cuda.is_available():
+        elif self._torch.cuda.is_available():
             self.device = "cuda"
-        elif torch.backends.mps.is_available():
+        elif self._torch.backends.mps.is_available():
             self.device = "mps"
         else:
             self.device = "cpu"
 
         # Determine dtype based on device
         if self.device == "cuda" or self.device.startswith("cuda:"):
-            dtype = torch.float16
+            dtype = self._torch.float16
             device_map = "auto"
         elif self.device == "mps":
-            dtype = torch.float32  # MPS works best with float32
+            dtype = self._torch.float32  # MPS works best with float32
             device_map = None
         else:
-            dtype = torch.float32
+            dtype = self._torch.float32
             device_map = None
 
         # Handle pre-loaded model case - skip all loading logic
@@ -138,9 +162,9 @@ class TransformersBackend(InferenceBackend):
                         load_in_4bit=config.load_in_4bit,
                     )
                     # Load LoRA adapter using PEFT
-                    from peft import PeftModel  # noqa: PLC0415
-
-                    self.model = PeftModel.from_pretrained(self.model, config.adapter_path)
+                    self.model = self._peft.PeftModel.from_pretrained(
+                        self.model, config.adapter_path
+                    )
                 else:
                     # Load merged model or base model directly
                     self.model, self.tokenizer = FastLanguageModel.from_pretrained(
@@ -172,9 +196,7 @@ class TransformersBackend(InferenceBackend):
 
             # Load PEFT adapter if provided
             if config.adapter_path:
-                from peft import PeftModel  # noqa: PLC0415
-
-                self.model = PeftModel.from_pretrained(self.model, config.adapter_path)
+                self.model = self._peft.PeftModel.from_pretrained(self.model, config.adapter_path)
 
             # Move to device if not using device_map
             if self.device in ("cpu", "mps"):
@@ -217,7 +239,7 @@ class TransformersBackend(InferenceBackend):
         ).to(self.model.device)
 
         # Generate with optimizations
-        with torch.no_grad():
+        with self._torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=self.config.max_tokens,
@@ -273,7 +295,7 @@ class TransformersBackend(InferenceBackend):
         ).to(self.model.device)
 
         # Generate batch with optimizations
-        with torch.no_grad():
+        with self._torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=self.config.max_tokens,
@@ -316,8 +338,8 @@ class TransformersBackend(InferenceBackend):
             del self.model
         if hasattr(self, "tokenizer"):
             del self.tokenizer
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        if self._torch.cuda.is_available():
+            self._torch.cuda.empty_cache()
 
     def _format_prompt(
         self,
