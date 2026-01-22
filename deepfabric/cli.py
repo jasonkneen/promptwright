@@ -23,7 +23,7 @@ from .topic_manager import load_or_build_topic_model, save_topic_model
 from .topic_model import TopicModel
 from .tui import configure_tui, get_tui
 from .update_checker import check_for_updates
-from .utils import get_bool_env
+from .utils import get_bool_env, parse_num_samples
 from .validation import show_validation_success, validate_path_requirements
 
 OverrideValue = str | int | float | bool | None
@@ -89,7 +89,7 @@ class GenerateOptions(BaseModel):
     temperature: float | None = None
     degree: int | None = None
     depth: int | None = None
-    num_samples: int | None = None
+    num_samples: int | str | None = None
     batch_size: int | None = None
     base_url: str | None = None
     include_system_message: bool | None = None
@@ -123,7 +123,7 @@ class GenerationPreparation(BaseModel):
     config: DeepFabricConfig
     topics_overrides: OverrideMap = Field(default_factory=dict)
     generation_overrides: OverrideMap = Field(default_factory=dict)
-    num_samples: int
+    num_samples: int | str  # Can be int, "auto", or percentage like "50%"
     batch_size: int
     depth: int
     degree: int
@@ -131,7 +131,8 @@ class GenerationPreparation(BaseModel):
 
     @model_validator(mode="after")
     def validate_positive_dimensions(self) -> "GenerationPreparation":
-        if self.num_samples <= 0:
+        # Skip num_samples validation for dynamic values (auto or percentage)
+        if isinstance(self.num_samples, int) and self.num_samples <= 0:
             raise ValueError("num_samples must be greater than zero")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be greater than zero")
@@ -219,6 +220,8 @@ def _validate_api_keys(
 
 def _load_and_prepare_generation_context(
     options: GenerateOptions,
+    *,
+    skip_path_validation: bool = False,
 ) -> GenerationPreparation:
     """Load configuration, compute overrides, and validate derived parameters."""
     tui = get_tui()
@@ -274,23 +277,25 @@ def _load_and_prepare_generation_context(
 
     loading_existing = bool(options.topics_load)
 
-    validate_path_requirements(
-        mode=options.mode,
-        depth=final_depth,
-        degree=final_degree,
-        num_steps=final_num_samples,
-        batch_size=final_batch_size,
-        loading_existing=loading_existing,
-    )
+    # Skip path validation for topic-only mode since we're not generating dataset samples
+    if not skip_path_validation:
+        validate_path_requirements(
+            mode=options.mode,
+            depth=final_depth,
+            degree=final_degree,
+            num_samples=final_num_samples,
+            batch_size=final_batch_size,
+            loading_existing=loading_existing,
+        )
 
-    show_validation_success(
-        mode=options.mode,
-        depth=final_depth,
-        degree=final_degree,
-        num_steps=final_num_samples,
-        batch_size=final_batch_size,
-        loading_existing=loading_existing,
-    )
+        show_validation_success(
+            mode=options.mode,
+            depth=final_depth,
+            degree=final_degree,
+            num_samples=final_num_samples,
+            batch_size=final_batch_size,
+            loading_existing=loading_existing,
+        )
 
     try:
         return GenerationPreparation(
@@ -426,7 +431,11 @@ def _run_generation(
 @click.option("--temperature", type=float, help="Temperature setting")
 @click.option("--degree", type=int, help="Degree (branching factor)")
 @click.option("--depth", type=int, help="Depth setting")
-@click.option("--num-samples", type=int, help="Number of samples to generate")
+@click.option(
+    "--num-samples",
+    type=str,
+    help="Number of samples: integer, 'auto' (all topics), or percentage like '50%'",
+)
 @click.option("--batch-size", type=int, help="Batch size")
 @click.option("--base-url", help="Base URL for LLM provider API endpoint")
 @click.option(
@@ -493,7 +502,7 @@ def generate(  # noqa: PLR0913
     temperature: float | None = None,
     degree: int | None = None,
     depth: int | None = None,
-    num_samples: int | None = None,
+    num_samples: str | None = None,
     batch_size: int | None = None,
     base_url: str | None = None,
     include_system_message: bool | None = None,
@@ -533,6 +542,9 @@ def generate(  # noqa: PLR0913
     )
 
     try:
+        # Parse num_samples from CLI string (could be int, "auto", or "50%")
+        parsed_num_samples = parse_num_samples(num_samples)
+
         options = GenerateOptions(
             config_file=config_file,
             output_system_prompt=output_system_prompt,
@@ -547,7 +559,7 @@ def generate(  # noqa: PLR0913
             temperature=temperature,
             degree=degree,
             depth=depth,
-            num_samples=num_samples,
+            num_samples=parsed_num_samples,
             batch_size=batch_size,
             base_url=base_url,
             include_system_message=include_system_message,
@@ -560,7 +572,7 @@ def generate(  # noqa: PLR0913
             cloud_upload=cloud_upload,
             tui=tui,
         )
-    except PydanticValidationError as error:
+    except (PydanticValidationError, ValueError) as error:
         handle_error(click.get_current_context(), ConfigurationError(str(error)))
         return
 
@@ -573,7 +585,9 @@ def generate(  # noqa: PLR0913
         tui.info("Initializing DeepFabric...")  # type: ignore
         print()
 
-        preparation = _load_and_prepare_generation_context(options)
+        preparation = _load_and_prepare_generation_context(
+            options, skip_path_validation=topic_only
+        )
 
         topic_model = _initialize_topic_model(
             preparation=preparation,

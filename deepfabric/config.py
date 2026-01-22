@@ -20,6 +20,7 @@ from .constants import (
 )
 from .exceptions import ConfigurationError
 from .metrics import trace
+from .utils import parse_num_samples
 
 
 def _normalize_reasoning_style(value: str | None) -> str | None:
@@ -273,10 +274,9 @@ class OutputConfig(BaseModel):
         default=True,
         description="Whether to include system message in output format",
     )
-    num_samples: int = Field(
+    num_samples: int | str = Field(
         default=ENGINE_DEFAULT_NUM_EXAMPLES,
-        ge=1,
-        description="Number of training samples to generate",
+        description="Number of samples: integer, 'auto' (100% of topics), or percentage like '50%'",
     )
     batch_size: int = Field(
         default=ENGINE_DEFAULT_BATCH_SIZE,
@@ -284,6 +284,15 @@ class OutputConfig(BaseModel):
         description="Number of samples to process at a time",
     )
     save_as: str = Field(..., min_length=1, description="Where to save the final dataset")
+
+    @field_validator("num_samples", mode="before")
+    @classmethod
+    def validate_num_samples(cls, v: int | str) -> int | str:
+        """Validate num_samples: integer, 'auto', or percentage like '50%'."""
+        result = parse_num_samples(v)
+        if result is None:
+            raise ValueError("num_samples cannot be None")
+        return result
 
 
 class HuggingFaceConfig(BaseModel):
