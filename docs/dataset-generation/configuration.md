@@ -53,6 +53,12 @@ output:
   batch_size: 2
   save_as: "dataset.jsonl"
 
+  # Optional: Checkpoint for resumable generation
+  checkpoint:
+    interval: 500       # Save every 500 samples
+    path: ".checkpoints"
+    retry_failed: false
+
 # Optional: Upload to HuggingFace
 huggingface:
   repository: "org/dataset-name"
@@ -181,6 +187,7 @@ Controls final dataset.
 | `num_samples` | int \| string | required | Total samples: integer, `"auto"`, or percentage like `"50%"` |
 | `batch_size` | int | 1 | Parallel generation batch size |
 | `save_as` | string | required | Output file path |
+| `checkpoint` | object | - | Checkpoint configuration (see below) |
 
 !!! tip "Auto and Percentage Samples"
     `num_samples` supports special values:
@@ -190,6 +197,46 @@ Controls final dataset.
     - **Percentage** (e.g., `"50%"`, `"200%"`): Generate samples relative to topic path count
 
     When `num_samples` exceeds the number of topic paths, topics cycle for even coverage. An integer larger than the path count is equivalent to a percentage—for example, with 50 paths, `num_samples: 100` behaves the same as `num_samples: "200%"`.
+
+#### output.checkpoint (Optional)
+
+Configuration for checkpoint-based resume capability. Checkpoints allow pausing and resuming long-running dataset generation without losing progress.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `interval` | int | required | Save checkpoint every N samples |
+| `path` | string | ".checkpoints" | Directory to store checkpoint files |
+| `retry_failed` | bool | false | When resuming, retry previously failed samples |
+
+```yaml title="Checkpoint configuration"
+output:
+  save_as: "dataset.jsonl"
+  num_samples: 5000
+  batch_size: 5
+  checkpoint:
+    interval: 500     # Save every 500 samples
+    path: "./my-checkpoints"
+    retry_failed: false
+```
+
+Checkpointing creates three files in the checkpoint directory:
+
+- `{name}.checkpoint.json` - Metadata (progress, IDs processed)
+- `{name}.checkpoint.jsonl` - Samples saved so far
+- `{name}.checkpoint.failures.jsonl` - Failed samples for debugging
+
+!!! tip "Choosing Checkpoint Interval"
+    The checkpoint `interval` specifies how many samples to generate between saves. Checkpoints save after each **step** completes (a step generates `batch_size` samples), so:
+
+    - If `interval < batch_size`, checkpoints save after every step
+    - If `interval > batch_size`, checkpoints save when cumulative samples reach the threshold
+
+    For example, with `batch_size: 20` and `interval: 8`, checkpoints actually save every 20 samples (after each step) since 20 > 8. To checkpoint less frequently, set `interval` larger than `batch_size`—e.g., `interval: 100` with `batch_size: 20` saves every 5 steps (100 samples).
+
+    Choose an interval that balances recovery granularity (smaller = less work lost) against I/O overhead (larger = fewer disk writes).
+
+!!! tip "Memory Optimization"
+    When checkpointing is enabled, samples are flushed to disk periodically, keeping memory usage constant regardless of dataset size.
 
 ### huggingface (Optional)
 

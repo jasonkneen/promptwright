@@ -7,6 +7,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .constants import (
+    DEFAULT_CHECKPOINT_DIR,
     DEFAULT_MAX_RETRIES,
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
@@ -263,6 +264,29 @@ class GenerationConfig(BaseModel):
     )
 
 
+class CheckpointConfig(BaseModel):
+    """Configuration for checkpoint-based resume capability.
+
+    Checkpoints allow pausing and resuming long-running dataset generation
+    without losing progress. When enabled, samples are periodically saved
+    to disk and can be resumed if generation is interrupted.
+    """
+
+    interval: int = Field(
+        ...,
+        ge=1,
+        description="Save checkpoint every N samples",
+    )
+    path: str = Field(
+        default=DEFAULT_CHECKPOINT_DIR,
+        description="Directory to store checkpoint files",
+    )
+    retry_failed: bool = Field(
+        default=False,
+        description="When resuming, retry previously failed samples",
+    )
+
+
 class OutputConfig(BaseModel):
     """Configuration for final dataset output."""
 
@@ -284,6 +308,11 @@ class OutputConfig(BaseModel):
         description="Number of samples to process at a time",
     )
     save_as: str = Field(..., min_length=1, description="Where to save the final dataset")
+
+    # Optional checkpoint configuration (nested inside output)
+    checkpoint: CheckpointConfig | None = Field(
+        None, description="Checkpoint configuration for resumable generation"
+    )
 
     @field_validator("num_samples", mode="before")
     @classmethod
@@ -597,6 +626,15 @@ See documentation for full examples.
             # Output config
             "sys_msg": self.output.include_system_message,
             "dataset_system_prompt": self.output.system_prompt or self.generation.system_prompt,
+            "output_save_as": self.output.save_as,
+            # Checkpoint config (nested inside output)
+            "checkpoint_interval": self.output.checkpoint.interval if self.output.checkpoint else None,
+            "checkpoint_path": (
+                self.output.checkpoint.path if self.output.checkpoint else DEFAULT_CHECKPOINT_DIR
+            ),
+            "checkpoint_retry_failed": (
+                self.output.checkpoint.retry_failed if self.output.checkpoint else False
+            ),
         }
 
         # Tool config
@@ -632,6 +670,16 @@ See documentation for full examples.
             "batch_size": self.output.batch_size,
             "save_as": self.output.save_as,
         }
+
+    def get_checkpoint_config(self) -> dict:
+        """Get checkpoint configuration."""
+        if self.output.checkpoint is None:
+            return {
+                "interval": None,
+                "path": DEFAULT_CHECKPOINT_DIR,
+                "retry_failed": False,
+            }
+        return self.output.checkpoint.model_dump()
 
     def get_huggingface_config(self) -> dict:
         """Get Hugging Face configuration."""

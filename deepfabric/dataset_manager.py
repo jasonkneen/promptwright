@@ -6,6 +6,7 @@ import traceback
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from datasets import Dataset as HFDataset
@@ -113,6 +114,7 @@ async def handle_dataset_events_async(
                         tui.init_status(
                             total_steps=event["num_steps"],
                             total_samples=event["total_samples"],
+                            checkpoint_enabled=event.get("checkpoint_enabled", False),
                         )
 
                         # Build layout with footer card
@@ -203,6 +205,28 @@ async def handle_dataset_events_async(
                     step = int(event.get("step", 0))
                     total = int(event.get("total_steps", 0))
                     tui.status_step_start(step, total)
+
+                elif event["event"] == "checkpoint_saved":
+                    # Display checkpoint save notification
+                    total_samples = event.get("total_samples", 0)
+                    total_failures = event.get("total_failures", 0)
+                    is_final = event.get("final", False)
+
+                    if footer_prog and task is not None:
+                        # Rich mode: log to events panel and update status
+                        if is_final:
+                            tui.log_event(f"💾 Final checkpoint: {total_samples} samples")
+                        else:
+                            tui.log_event(f"💾 Checkpoint: {total_samples} samples")
+                        tui.status_checkpoint_saved(total_samples)
+                    elif isinstance(simple_task, dict):
+                        # Simple mode: print checkpoint notification
+                        checkpoint_msg = f"Checkpoint saved: {total_samples} samples"
+                        if total_failures > 0:
+                            checkpoint_msg += f" ({total_failures} failures)"
+                        if is_final:
+                            checkpoint_msg = "Final " + checkpoint_msg.lower()
+                        tui.info(checkpoint_msg)
 
                 elif event["event"] == "generation_complete":
                     if live:
@@ -500,6 +524,7 @@ def _strip_nulls(obj: Any) -> Any:
 
 def _save_jsonl_without_nulls(dataset: HFDataset, save_path: str) -> None:
     """Save HF Dataset to JSONL, stripping null values injected by Arrow schema."""
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     with open(save_path, "w") as f:
         for row in dataset:
             cleaned = _strip_nulls(dict(row))
@@ -568,9 +593,11 @@ def save_dataset(
         _save_jsonl_without_nulls(dataset, save_path)
         tui.success(f"Dataset saved to: {save_path}")
 
-        # Save failed samples if engine has any
-        if engine and engine.failed_samples:
-            _save_failed_samples(save_path, engine.failed_samples, tui)
+        # Save failed samples if engine has any (including flushed to checkpoint)
+        if engine:
+            all_failures = engine.get_all_failures()
+            if all_failures:
+                _save_failed_samples(save_path, all_failures, tui)
 
         # Handle automatic uploads if configured
         if config:
