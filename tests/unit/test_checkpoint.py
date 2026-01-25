@@ -17,7 +17,7 @@ from deepfabric.constants import (
     CHECKPOINT_FAILURES_SUFFIX,
     CHECKPOINT_METADATA_SUFFIX,
     CHECKPOINT_SAMPLES_SUFFIX,
-    DEFAULT_CHECKPOINT_DIR,
+    CHECKPOINT_VERSION,
 )
 from deepfabric.exceptions import DataSetGeneratorError
 from deepfabric.generator import DataSetGenerator, DataSetGeneratorConfig
@@ -63,7 +63,7 @@ class TestCheckpointConfig:
             model_name="gpt-4",
         )
         assert config.checkpoint_interval is None
-        assert config.checkpoint_path == DEFAULT_CHECKPOINT_DIR
+        assert config.checkpoint_path is None  # None means auto-resolve to XDG dir
         assert config.checkpoint_retry_failed is False
         assert config.output_save_as is None
 
@@ -400,7 +400,7 @@ class TestCheckpointMetadata:
         assert "processed_ids" in metadata
         assert "checkpoint_interval" in metadata
 
-        assert metadata["version"] == 2  # noqa: PLR2004
+        assert metadata["version"] == CHECKPOINT_VERSION
         assert metadata["provider"] == "openai"
         assert metadata["model_name"] == "gpt-4"
         assert "uuid-1" in metadata["processed_ids"]

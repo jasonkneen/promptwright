@@ -223,9 +223,12 @@ deepfabric generate config.yaml --resume --retry-failed
 | Parameter | Description |
 |-----------|-------------|
 | `--checkpoint-interval N` | Save checkpoint every N samples |
-| `--checkpoint-path PATH` | Directory for checkpoint files (default: `.checkpoints`) |
+| `--checkpoint-path PATH` | Override checkpoint directory (rarely needed) |
 | `--resume` | Resume from existing checkpoint |
 | `--retry-failed` | When resuming, retry previously failed samples |
+
+!!! info "Checkpoint Location"
+    Checkpoints are stored in an XDG-compliant location: `~/.local/share/deepfabric/checkpoints/` (or `$XDG_DATA_HOME/deepfabric/checkpoints/`). Each config file gets its own subdirectory based on a hash of its path, so different projects don't interfere with each other.
 
 !!! tip "Checkpoint Status"
     Use `deepfabric checkpoint-status config.yaml` to inspect checkpoint progress without resuming.
@@ -247,6 +250,32 @@ On resume, the generator:
 
 !!! info "Memory Optimization"
     When checkpointing is enabled, samples are flushed to disk periodically, keeping memory usage constant regardless of dataset size. This allows generating datasets with 50,000+ samples without memory issues.
+
+### Graceful Stop
+
+Press ++ctrl+c++ once during generation to request a graceful stop. The generator will:
+
+1. Complete the current batch
+2. Save a final checkpoint
+3. Exit cleanly
+
+The TUI status panel shows "Stopping: at next checkpoint" to confirm the stop is pending. Press ++ctrl+c++ a second time to force quit immediately (no checkpoint saved).
+
+### Checkpoint Conflicts
+
+If you start generation without `--resume` but a checkpoint already exists for that configuration, you'll be prompted:
+
+```
+⚠ Existing checkpoint found for this configuration
+
+  1) Resume from checkpoint
+  2) Clear checkpoint and start fresh
+  3) Abort
+
+Choose an option [1/2/3] (1):
+```
+
+This prevents accidentally overwriting or corrupting existing checkpoint data.
 
 ## Error Recovery
 

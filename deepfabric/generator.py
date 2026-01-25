@@ -21,7 +21,6 @@ from .constants import (
     CHECKPOINT_METADATA_SUFFIX,
     CHECKPOINT_SAMPLES_SUFFIX,
     CHECKPOINT_VERSION,
-    DEFAULT_CHECKPOINT_DIR,
     DEFAULT_MAX_RETRIES,
     DEFAULT_REQUEST_TIMEOUT,
     DEFAULT_SAMPLE_RETRIES,
@@ -48,7 +47,7 @@ from .schemas import Conversation, ToolRegistry, get_conversation_schema
 from .tools import BUILTIN_TOOL_REGISTRY
 from .tools.loader import load_tools_from_dict, load_tools_from_endpoint
 from .topic_model import TopicModel, TopicPath
-from .utils import ensure_not_running_loop, is_validation_error
+from .utils import ensure_not_running_loop, get_checkpoint_dir, is_validation_error
 
 # Handle circular import for type hints
 if TYPE_CHECKING:
@@ -207,9 +206,9 @@ class DataSetGeneratorConfig(BaseModel):
         ge=1,
         description="Save checkpoint every N samples. None disables checkpointing.",
     )
-    checkpoint_path: str = Field(
-        default=DEFAULT_CHECKPOINT_DIR,
-        description="Directory to store checkpoint files",
+    checkpoint_path: str | None = Field(
+        default=None,
+        description="Directory to store checkpoint files. None uses fallback '.checkpoints'",
     )
     checkpoint_retry_failed: bool = Field(
         default=False,
@@ -218,6 +217,10 @@ class DataSetGeneratorConfig(BaseModel):
     output_save_as: str | None = Field(
         default=None,
         description="Output file path (used to derive checkpoint file names)",
+    )
+    topics_file: str | None = Field(
+        default=None,
+        description="Topics file path (stored in checkpoint metadata for auto-resume)",
     )
 
 
@@ -279,6 +282,9 @@ class DataSetGenerator:
         # Memory optimization: track flushed counts for checkpoint mode
         self._flushed_samples_count = 0
         self._flushed_failures_count = 0
+
+        # Graceful stop flag - set by signal handler to stop at next checkpoint
+        self.stop_requested = False
 
     def _initialize_tool_registry(self):
         """Initialize tool registry from component configuration.
@@ -348,7 +354,8 @@ class DataSetGenerator:
             )
 
         # Create checkpoint directory if needed
-        checkpoint_dir = Path(self.config.checkpoint_path)
+        # Use XDG-compliant fallback if checkpoint_path not resolved by CLI
+        checkpoint_dir = Path(self.config.checkpoint_path or get_checkpoint_dir(config_path=None))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Derive checkpoint filenames from output filename
@@ -392,13 +399,13 @@ class DataSetGenerator:
 
         # Append new samples to checkpoint file
         if new_samples:
-            with open(self._checkpoint_samples_path, "a") as f:
+            with open(self._checkpoint_samples_path, "a", encoding="utf-8") as f:
                 for sample in new_samples:
                     f.write(json.dumps(sample, separators=(",", ":")) + "\n")
 
         # Append new failures to failures file
         if new_failures and self._checkpoint_failures_path:
-            with open(self._checkpoint_failures_path, "a") as f:
+            with open(self._checkpoint_failures_path, "a", encoding="utf-8") as f:
                 for failure in new_failures:
                     f.write(json.dumps(failure, separators=(",", ":")) + "\n")
 
@@ -447,9 +454,10 @@ class DataSetGenerator:
             "total_failures": total_failures,
             "processed_ids": list(self._processed_ids),
             "checkpoint_interval": self.config.checkpoint_interval,
+            "topics_file": self.config.topics_file,
         }
 
-        with open(self._checkpoint_metadata_path, "w") as f:
+        with open(self._checkpoint_metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
 
     def _validate_checkpoint_compatibility(self, metadata: dict) -> None:
@@ -537,7 +545,7 @@ class DataSetGenerator:
             if self._checkpoint_samples_path and self._checkpoint_samples_path.exists():
                 actual_count = 0
                 try:
-                    with open(self._checkpoint_samples_path) as f:
+                    with open(self._checkpoint_samples_path, encoding="utf-8") as f:
                         for line_num, raw_line in enumerate(f, 1):
                             stripped = raw_line.strip()
                             if stripped:
@@ -560,6 +568,21 @@ class DataSetGenerator:
 
         return (error_msg is None, error_msg)
 
+    def has_checkpoint(self) -> bool:
+        """Check if a checkpoint exists without loading it.
+
+        Returns:
+            True if checkpoint metadata file exists, False otherwise
+        """
+        if self.config.checkpoint_interval is None:
+            return False
+
+        self._initialize_checkpoint_paths()
+        return (
+            self._checkpoint_metadata_path is not None
+            and self._checkpoint_metadata_path.exists()
+        )
+
     def load_checkpoint(self, retry_failed: bool = False) -> bool:
         """Load checkpoint data if it exists.
 
@@ -579,7 +602,7 @@ class DataSetGenerator:
 
         try:
             # Load metadata
-            with open(self._checkpoint_metadata_path) as f:
+            with open(self._checkpoint_metadata_path, encoding="utf-8") as f:
                 metadata = json.load(f)
 
             # Validate checkpoint integrity
@@ -598,7 +621,7 @@ class DataSetGenerator:
             # Memory optimization: track as flushed counts instead of loading into RAM
             if self._checkpoint_samples_path and self._checkpoint_samples_path.exists():
                 sample_count = 0
-                with open(self._checkpoint_samples_path) as f:
+                with open(self._checkpoint_samples_path, encoding="utf-8") as f:
                     for raw_line in f:
                         if raw_line.strip():
                             sample_count += 1
@@ -608,7 +631,7 @@ class DataSetGenerator:
             failed_ids: set[str] = set()
             if self._checkpoint_failures_path and self._checkpoint_failures_path.exists():
                 failure_count = 0
-                with open(self._checkpoint_failures_path) as f:
+                with open(self._checkpoint_failures_path, encoding="utf-8") as f:
                     for raw_line in f:
                         stripped = raw_line.strip()
                         if stripped:
@@ -669,7 +692,7 @@ class DataSetGenerator:
         """
         all_samples: list[dict] = []
         if self._checkpoint_samples_path and self._checkpoint_samples_path.exists():
-            with open(self._checkpoint_samples_path) as f:
+            with open(self._checkpoint_samples_path, encoding="utf-8") as f:
                 for raw_line in f:
                     stripped = raw_line.strip()
                     if stripped:
@@ -689,7 +712,7 @@ class DataSetGenerator:
 
         # First load from checkpoint file if it exists
         if self._checkpoint_failures_path and self._checkpoint_failures_path.exists():
-            with open(self._checkpoint_failures_path) as f:
+            with open(self._checkpoint_failures_path, encoding="utf-8") as f:
                 for raw_line in f:
                     stripped = raw_line.strip()
                     if stripped:
@@ -1246,6 +1269,8 @@ class DataSetGenerator:
                 "topic_model_type": topic_model_type,
                 "resumed_from_checkpoint": len(self._processed_ids) > 0,
                 "previously_processed": len(self._processed_ids),
+                "resumed_samples": self._flushed_samples_count,
+                "resumed_failures": self._flushed_failures_count,
                 "checkpoint_enabled": self.config.checkpoint_interval is not None,
             }
 
@@ -1324,6 +1349,16 @@ class DataSetGenerator:
                         "total_samples": self._flushed_samples_count,
                         "total_failures": self._flushed_failures_count,
                     }
+
+                    # Check for graceful stop request after checkpoint save
+                    if self.stop_requested:
+                        yield {
+                            "event": "generation_stopped",
+                            "message": "Stopped at checkpoint as requested",
+                            "total_samples": self._flushed_samples_count,
+                            "total_failures": self._flushed_failures_count,
+                        }
+                        return  # Exit generator cleanly
 
                 failed_in_batch = len(self.failed_samples) - failed_before
                 failure_reasons: list[str] = []
@@ -1597,7 +1632,7 @@ class DataSetGenerator:
     def _save_samples_to_file(self, save_path: str):
         """Save the current samples to a JSONL file."""
 
-        with open(save_path, "w") as f:
+        with open(save_path, "w", encoding="utf-8") as f:
             for sample in self._samples:
                 f.write(json.dumps(sample, separators=(",", ":")) + "\n")
 
