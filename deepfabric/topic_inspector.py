@@ -203,6 +203,7 @@ def inspect_topic_file(
             expanded_paths = []
             for path in all_paths:
                 if len(path) > level:
+                    original_uuid = path_to_uuid.get(tuple(path), "")
                     # Trim path to start from the specified level
                     trimmed_path = path[level:]
                     # Limit depth if expand_depth is not -1
@@ -213,6 +214,9 @@ def inspect_topic_file(
                     if path_key not in seen_paths:
                         seen_paths.add(path_key)
                         expanded_paths.append(trimmed_path)
+                        # Map trimmed path to original UUID (for --uuid display)
+                        if original_uuid and path_key not in path_to_uuid:
+                            path_to_uuid[path_key] = original_uuid
 
     return TopicInspectionResult(
         format=format_type,

@@ -2169,11 +2169,6 @@ def topic_inspect(
                 output["expanded_paths"] = result.expanded_paths
             if result.all_paths is not None:
                 output["all_paths"] = result.all_paths
-            if show_uuid and result.path_to_uuid:
-                # Convert tuple keys to string for JSON serialization
-                output["path_to_uuid"] = {
-                    " > ".join(k): v for k, v in result.path_to_uuid.items()
-                }
             tui.console.print_json(json.dumps(output))
             return
 
@@ -2270,9 +2265,7 @@ def _display_inspection_result(
         if not result.expanded_paths:
             tui.console.print(f"  [dim]No topics at or below level {level}[/dim]")
         elif output_format == "table":
-            _display_paths_as_table(
-                tui, result.expanded_paths, result.path_to_uuid if show_uuid else None
-            )
+            _display_paths_as_table(tui, result.expanded_paths)
         else:
             _display_paths_as_tree(
                 tui, result.expanded_paths, result.path_to_uuid if show_uuid else None
@@ -2284,20 +2277,14 @@ def _display_inspection_result(
         tui.console.print("[cyan bold]Full Tree Structure:[/cyan bold]")
 
         if output_format == "table":
-            _display_paths_as_table(
-                tui, result.all_paths, result.path_to_uuid if show_uuid else None
-            )
+            _display_paths_as_table(tui, result.all_paths)
         else:
             _display_paths_as_tree(
                 tui, result.all_paths, result.path_to_uuid if show_uuid else None
             )
 
 
-def _display_paths_as_table(
-    tui: "DeepFabricTUI",
-    paths: list[list[str]],
-    path_to_uuid: dict[tuple[str, ...], str] | None = None,
-) -> None:
+def _display_paths_as_table(tui: "DeepFabricTUI", paths: list[list[str]]) -> None:
     """Display paths in a table format."""
     from rich.table import Table  # noqa: PLC0415
 
@@ -2305,24 +2292,15 @@ def _display_paths_as_table(
     table.add_column("#", style="dim")
     table.add_column("Path", style="white")
     table.add_column("Depth", style="green")
-    if path_to_uuid:
-        table.add_column("UUID", style="yellow")
 
     for i, path in enumerate(paths[:100], 1):
         path_str = " > ".join(path)
         if len(path_str) > 80:
             path_str = path_str[:77] + "..."
-        if path_to_uuid:
-            uuid = path_to_uuid.get(tuple(path), "")
-            table.add_row(str(i), path_str, str(len(path)), uuid)
-        else:
-            table.add_row(str(i), path_str, str(len(path)))
+        table.add_row(str(i), path_str, str(len(path)))
 
     if len(paths) > 100:
-        if path_to_uuid:
-            table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "", "")
-        else:
-            table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "")
+        table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "")
 
     tui.console.print(table)
 
@@ -2380,28 +2358,16 @@ def _add_children_to_tree(
 
     # Group paths by their element at current depth
     children: dict[str, list[list[str]]] = {}
-    leaf_paths: list[list[str]] = []  # Paths that end at current depth
-
     for path in paths:
         if len(path) > depth:
             child_topic = path[depth]
             if child_topic not in children:
                 children[child_topic] = []
             children[child_topic].append(path)
-        elif len(path) == depth:
-            # This path ends here (leaf node)
-            leaf_paths.append(path)
-
-    # Show leaf nodes with UUIDs if available
-    for leaf_path in leaf_paths:
-        if path_to_uuid:
-            uuid = path_to_uuid.get(tuple(leaf_path), "")
-            if uuid:
-                parent.add(f"[dim](UUID: {uuid})[/dim]")
 
     # Add children to tree
     for child_topic, child_paths in list(children.items())[:20]:
-        # Check if any child path ends at the next level (is a leaf)
+        # Check if this child is a leaf (path ends at depth + 1)
         is_leaf = any(len(p) == depth + 1 for p in child_paths)
         if is_leaf and path_to_uuid:
             # Find the UUID for this leaf
@@ -2409,7 +2375,7 @@ def _add_children_to_tree(
             if leaf_path:
                 uuid = path_to_uuid.get(tuple(leaf_path), "")
                 if uuid:
-                    child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
+                    child_node = parent.add(f"{child_topic} [yellow]{uuid}[/yellow]")
                 else:
                     child_node = parent.add(child_topic)
             else:

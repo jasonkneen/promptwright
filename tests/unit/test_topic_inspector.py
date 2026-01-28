@@ -262,16 +262,7 @@ class TestTopicInspectCLI:
         """--uuid flag shows UUIDs for leaf nodes."""
         result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--all", "--uuid"])
         assert result.exit_code == 0
-        assert "UUID:" in result.output
+        # UUIDs are 16 character hex strings shown after leaf topics
+        import re
 
-    def test_inspect_json_with_uuid(self, cli_runner, tree_jsonl_file):
-        """--uuid with --format json includes path_to_uuid mapping."""
-        result = cli_runner.invoke(
-            cli, ["topic", "inspect", tree_jsonl_file, "--format", "json", "--uuid"]
-        )
-        assert result.exit_code == 0
-        json_start = result.output.find("{")
-        json_output = result.output[json_start:]
-        output = json.loads(json_output)
-        assert "path_to_uuid" in output
-        assert len(output["path_to_uuid"]) > 0
+        assert re.search(r"[a-f0-9]{16}", result.output)
