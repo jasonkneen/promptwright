@@ -175,13 +175,19 @@ def inspect_topic_file(
 
         # If expand_depth is set, get paths from level onwards
         if expand_depth is not None:
+            seen_paths: set[tuple[str, ...]] = set()
             expanded_paths = []
             for path in all_paths:
                 if len(path) > level:
                     # Trim path to start from the specified level
                     trimmed_path = path[level:]
-                    # If expand_depth is -1, include all; otherwise limit depth
-                    if expand_depth == -1 or len(trimmed_path) <= expand_depth + 1:
+                    # Limit depth if expand_depth is not -1
+                    if expand_depth != -1 and len(trimmed_path) > expand_depth + 1:
+                        trimmed_path = trimmed_path[: expand_depth + 1]
+                    # Deduplicate paths (after trimming, many may be identical)
+                    path_key = tuple(trimmed_path)
+                    if path_key not in seen_paths:
+                        seen_paths.add(path_key)
                         expanded_paths.append(trimmed_path)
 
     return TopicInspectionResult(
