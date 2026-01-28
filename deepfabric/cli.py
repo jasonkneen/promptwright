@@ -2296,24 +2296,29 @@ def _display_paths_as_tree(tui: "DeepFabricTUI", paths: list[list[str]]) -> None
         return
 
     # Build a tree structure from paths
-    # Find common root
-    root_topics = set(p[0] for p in paths if p)
+    # Group paths by their root topic
+    root_groups: dict[str, list[list[str]]] = {}
+    for path in paths:
+        if path:
+            root = path[0]
+            if root not in root_groups:
+                root_groups[root] = []
+            root_groups[root].append(path)
 
-    if len(root_topics) == 1:
+    if len(root_groups) == 1:
+        # Single root - show directly
         root_topic = paths[0][0]
         tree = RichTree(f"[bold]{root_topic}[/bold]")
-
-        # Build tree recursively
         _add_children_to_tree(tree, paths, 1)
+        tui.console.print(tree)
     else:
-        # Multiple roots - show each path separately
-        tree = RichTree("[bold]Topics[/bold]")
-        for path in paths[:50]:
-            tree.add(" > ".join(path))
-        if len(paths) > 50:
-            tree.add(f"[dim]... and {len(paths) - 50} more[/dim]")
-
-    tui.console.print(tree)
+        # Multiple roots - show each as a separate tree
+        for root_topic, root_paths in list(root_groups.items())[:20]:
+            tree = RichTree(f"[bold]{root_topic}[/bold]")
+            _add_children_to_tree(tree, root_paths, 1)
+            tui.console.print(tree)
+        if len(root_groups) > 20:
+            tui.console.print(f"[dim]... and {len(root_groups) - 20} more topics[/dim]")
 
 
 def _add_children_to_tree(
