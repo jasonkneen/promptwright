@@ -270,3 +270,20 @@ class TestTopicInspectCLI:
         result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--level", "1", "--uuid"])
         assert result.exit_code == 0
         assert "UUID:" in result.output
+
+    def test_inspect_graph_with_uuid_at_level(self, cli_runner, graph_json_file):
+        """--uuid shows node UUIDs for graph format at any level."""
+        result = cli_runner.invoke(cli, ["topic", "inspect", graph_json_file, "--level", "1", "--uuid"])
+        assert result.exit_code == 0
+        # Graph nodes should show their UUIDs at level 1
+        assert "UUID:" in result.output
+        assert "test-uuid-" in result.output
+
+    def test_inspect_graph_with_uuid_all(self, cli_runner, graph_json_file):
+        """--uuid shows node UUIDs for all nodes in graph format."""
+        result = cli_runner.invoke(cli, ["topic", "inspect", graph_json_file, "--all", "--uuid"])
+        assert result.exit_code == 0
+        # Should show UUIDs for all nodes (Root, Child1, Child2)
+        assert "test-uuid-0" in result.output
+        assert "test-uuid-1" in result.output
+        assert "test-uuid-2" in result.output

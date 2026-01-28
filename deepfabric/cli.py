@@ -2251,13 +2251,21 @@ def _display_inspection_result(
         if not result.paths_at_level:
             tui.console.print(f"  [dim]No topics at level {level}[/dim]")
         else:
-            # Display as simple list of topic names (with UUIDs for leaf nodes)
+            # Display as simple list of topic names (with UUIDs)
             for topic_path in result.paths_at_level:
                 topic_name = topic_path[0] if topic_path else ""
-                if show_uuid and result.path_to_uuid:
-                    uuid = result.path_to_uuid.get(tuple(topic_path), "")
+                if show_uuid:
+                    # For graph format, use topic_to_uuid (node UUIDs)
+                    # For tree format, use path_to_uuid (leaf UUIDs only)
+                    uuid = ""
+                    if result.topic_to_uuid:
+                        uuid = result.topic_to_uuid.get(topic_name, "")
+                    if not uuid and result.path_to_uuid:
+                        uuid = result.path_to_uuid.get(tuple(topic_path), "")
                     if uuid:
-                        tui.console.print(f"  • {topic_name} [dim](UUID: {uuid})[/dim]")
+                        tui.console.print(
+                            f"  • {topic_name} [dim](UUID: {uuid})[/dim]", highlight=False
+                        )
                     else:
                         tui.console.print(f"  • {topic_name}")
                 else:
@@ -2275,7 +2283,10 @@ def _display_inspection_result(
             _display_paths_as_table(tui, result.expanded_paths)
         else:
             _display_paths_as_tree(
-                tui, result.expanded_paths, result.path_to_uuid if show_uuid else None
+                tui,
+                result.expanded_paths,
+                result.path_to_uuid if show_uuid else None,
+                result.topic_to_uuid if show_uuid else None,
             )
 
     # Show all paths with tree structure
@@ -2287,7 +2298,10 @@ def _display_inspection_result(
             _display_paths_as_table(tui, result.all_paths)
         else:
             _display_paths_as_tree(
-                tui, result.all_paths, result.path_to_uuid if show_uuid else None
+                tui,
+                result.all_paths,
+                result.path_to_uuid if show_uuid else None,
+                result.topic_to_uuid if show_uuid else None,
             )
 
 
@@ -2316,6 +2330,7 @@ def _display_paths_as_tree(
     tui: "DeepFabricTUI",
     paths: list[list[str]],
     path_to_uuid: dict[tuple[str, ...], str] | None = None,
+    topic_to_uuid: dict[str, str] | None = None,
 ) -> None:
     """Display paths in an indented tree format."""
     from rich.tree import Tree as RichTree  # noqa: PLC0415
@@ -2336,14 +2351,21 @@ def _display_paths_as_tree(
     if len(root_groups) == 1:
         # Single root - show directly
         root_topic = paths[0][0]
-        tree = RichTree(f"[bold]{root_topic}[/bold]")
-        _add_children_to_tree(tree, paths, 1, path_to_uuid=path_to_uuid)
+        # Show UUID for root if available (graph format)
+        root_label = f"[bold]{root_topic}[/bold]"
+        if topic_to_uuid and root_topic in topic_to_uuid:
+            root_label += f" [dim](UUID: {topic_to_uuid[root_topic]})[/dim]"
+        tree = RichTree(root_label)
+        _add_children_to_tree(tree, paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid)
         tui.console.print(tree)
     else:
         # Multiple roots - show each as a separate tree
         for root_topic, root_paths in list(root_groups.items())[:20]:
-            tree = RichTree(f"[bold]{root_topic}[/bold]")
-            _add_children_to_tree(tree, root_paths, 1, path_to_uuid=path_to_uuid)
+            root_label = f"[bold]{root_topic}[/bold]"
+            if topic_to_uuid and root_topic in topic_to_uuid:
+                root_label += f" [dim](UUID: {topic_to_uuid[root_topic]})[/dim]"
+            tree = RichTree(root_label)
+            _add_children_to_tree(tree, root_paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid)
             tui.console.print(tree)
         if len(root_groups) > 20:
             tui.console.print(f"[dim]... and {len(root_groups) - 20} more topics[/dim]")
@@ -2355,6 +2377,7 @@ def _add_children_to_tree(
     depth: int,
     max_depth: int = 5,
     path_to_uuid: dict[tuple[str, ...], str] | None = None,
+    topic_to_uuid: dict[str, str] | None = None,
 ) -> None:
     """Recursively add children to a rich tree (limited depth for display)."""
     if depth > max_depth:
@@ -2374,22 +2397,23 @@ def _add_children_to_tree(
 
     # Add children to tree
     for child_topic, child_paths in list(children.items())[:20]:
-        # Check if this child is a leaf (path ends at depth + 1)
-        is_leaf = any(len(p) == depth + 1 for p in child_paths)
-        if is_leaf and path_to_uuid:
-            # Find the UUID for this leaf
-            leaf_path = next((p for p in child_paths if len(p) == depth + 1), None)
-            if leaf_path:
-                uuid = path_to_uuid.get(tuple(leaf_path), "")
-                if uuid:
-                    child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
-                else:
-                    child_node = parent.add(child_topic)
-            else:
-                child_node = parent.add(child_topic)
+        # Check for UUID: first try topic_to_uuid (graph nodes), then path_to_uuid (leaves)
+        uuid = ""
+        if topic_to_uuid and child_topic in topic_to_uuid:
+            uuid = topic_to_uuid[child_topic]
+        elif path_to_uuid:
+            # Check if this child is a leaf (path ends at depth + 1)
+            is_leaf = any(len(p) == depth + 1 for p in child_paths)
+            if is_leaf:
+                leaf_path = next((p for p in child_paths if len(p) == depth + 1), None)
+                if leaf_path:
+                    uuid = path_to_uuid.get(tuple(leaf_path), "")
+
+        if uuid:
+            child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
         else:
             child_node = parent.add(child_topic)
-        _add_children_to_tree(child_node, child_paths, depth + 1, max_depth, path_to_uuid)
+        _add_children_to_tree(child_node, child_paths, depth + 1, max_depth, path_to_uuid, topic_to_uuid)
 
     if len(children) > 20:
         parent.add(f"[dim]... and {len(children) - 20} more siblings[/dim]")

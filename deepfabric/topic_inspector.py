@@ -25,6 +25,8 @@ class TopicInspectionResult:
     source_file: str
     # Maps path tuple to UUID/topic_id (for --uuid flag)
     path_to_uuid: dict[tuple[str, ...], str] = field(default_factory=dict)
+    # Maps topic name to UUID (for graph format, all nodes)
+    topic_to_uuid: dict[str, str] = field(default_factory=dict)
 
 
 def detect_format(file_path: str) -> Literal["tree", "graph"]:
@@ -99,14 +101,14 @@ def _load_tree_paths(file_path: str) -> tuple[list[list[str]], dict[tuple[str, .
 
 def _load_graph_data(
     file_path: str,
-) -> tuple[list[list[str]], dict[str, Any], dict[tuple[str, ...], str]]:
+) -> tuple[list[list[str]], dict[str, Any], dict[tuple[str, ...], str], dict[str, str]]:
     """Load graph data and extract paths and metadata.
 
     Args:
         file_path: Path to the JSON file
 
     Returns:
-        Tuple of (paths, metadata, path_to_uuid mapping)
+        Tuple of (paths, metadata, path_to_uuid mapping, topic_to_uuid mapping)
     """
     # Load Graph - need minimal params for from_json
     params = {
@@ -118,12 +120,19 @@ def _load_graph_data(
     }
     graph = Graph.from_json(file_path, params)
 
-    # Get paths with UUIDs
+    # Get paths with UUIDs (for leaf nodes)
     paths_with_ids = graph.get_all_paths_with_ids()
     all_paths = [tp.path for tp in paths_with_ids]
     path_to_uuid: dict[tuple[str, ...], str] = {
         tuple(tp.path): tp.topic_id for tp in paths_with_ids
     }
+
+    # Build topic name to UUID mapping for ALL nodes (not just leaves)
+    topic_to_uuid: dict[str, str] = {}
+    for node in graph.nodes.values():
+        node_uuid = node.metadata.get("uuid", "")
+        if node_uuid:
+            topic_to_uuid[node.topic] = node_uuid
 
     metadata: dict[str, Any] = {
         "total_nodes": len(graph.nodes),
@@ -145,7 +154,7 @@ def _load_graph_data(
         if file_metadata.get("model"):
             metadata["model"] = file_metadata["model"]
 
-    return all_paths, metadata, path_to_uuid
+    return all_paths, metadata, path_to_uuid, topic_to_uuid
 
 
 def inspect_topic_file(
@@ -168,8 +177,9 @@ def inspect_topic_file(
     format_type = detect_format(file_path)
 
     # Load paths and metadata based on format
+    topic_to_uuid: dict[str, str] = {}
     if format_type == "graph":
-        all_paths, metadata, path_to_uuid = _load_graph_data(file_path)
+        all_paths, metadata, path_to_uuid, topic_to_uuid = _load_graph_data(file_path)
     else:
         all_paths, path_to_uuid = _load_tree_paths(file_path)
         # Extract root topic from paths
@@ -233,4 +243,5 @@ def inspect_topic_file(
         metadata=metadata,
         source_file=file_path,
         path_to_uuid=path_to_uuid,
+        topic_to_uuid=topic_to_uuid,
     )
