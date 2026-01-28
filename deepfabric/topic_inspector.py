@@ -194,6 +194,11 @@ def inspect_topic_file(
                 if topic_at_level not in seen_topics:
                     seen_topics.add(topic_at_level)
                     unique_topics.append(topic_at_level)
+                    # If this topic is a leaf (path ends at level+1), map single-topic to UUID
+                    if len(path) == level + 1:
+                        original_uuid = path_to_uuid.get(tuple(path), "")
+                        if original_uuid:
+                            path_to_uuid[(topic_at_level,)] = original_uuid
         # Store as single-element paths for consistency
         paths_at_level = [[t] for t in unique_topics]
 

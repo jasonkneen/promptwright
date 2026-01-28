@@ -262,7 +262,11 @@ class TestTopicInspectCLI:
         """--uuid flag shows UUIDs for leaf nodes."""
         result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--all", "--uuid"])
         assert result.exit_code == 0
-        # UUIDs are 16 character hex strings shown after leaf topics
-        import re
+        assert "UUID:" in result.output
 
-        assert re.search(r"[a-f0-9]{16}", result.output)
+    def test_inspect_level_with_uuid(self, cli_runner, tree_jsonl_file):
+        """--level with --uuid shows UUIDs for leaf topics at that level."""
+        # The test fixture has Child2 as a leaf at level 1
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--level", "1", "--uuid"])
+        assert result.exit_code == 0
+        assert "UUID:" in result.output

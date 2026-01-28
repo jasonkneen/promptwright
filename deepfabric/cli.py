@@ -2251,10 +2251,17 @@ def _display_inspection_result(
         if not result.paths_at_level:
             tui.console.print(f"  [dim]No topics at level {level}[/dim]")
         else:
-            # Display as simple list of topic names
+            # Display as simple list of topic names (with UUIDs for leaf nodes)
             for topic_path in result.paths_at_level:
                 topic_name = topic_path[0] if topic_path else ""
-                tui.console.print(f"  • {topic_name}")
+                if show_uuid and result.path_to_uuid:
+                    uuid = result.path_to_uuid.get(tuple(topic_path), "")
+                    if uuid:
+                        tui.console.print(f"  • {topic_name} [dim](UUID: {uuid})[/dim]")
+                    else:
+                        tui.console.print(f"  • {topic_name}")
+                else:
+                    tui.console.print(f"  • {topic_name}")
 
     # Show expanded subtree from level (with --expand)
     if level is not None and expand is not None and result.expanded_paths is not None:
@@ -2375,7 +2382,7 @@ def _add_children_to_tree(
             if leaf_path:
                 uuid = path_to_uuid.get(tuple(leaf_path), "")
                 if uuid:
-                    child_node = parent.add(f"{child_topic} [yellow]{uuid}[/yellow]")
+                    child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
                 else:
                     child_node = parent.add(child_topic)
             else:
