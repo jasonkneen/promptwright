@@ -257,3 +257,21 @@ class TestTopicInspectCLI:
         assert result.exit_code == 0
         assert "Subtree from Level 1" in result.output
         assert "1 sublevel(s)" in result.output
+
+    def test_inspect_with_uuid_flag(self, cli_runner, tree_jsonl_file):
+        """--uuid flag shows UUIDs for leaf nodes."""
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--all", "--uuid"])
+        assert result.exit_code == 0
+        assert "UUID:" in result.output
+
+    def test_inspect_json_with_uuid(self, cli_runner, tree_jsonl_file):
+        """--uuid with --format json includes path_to_uuid mapping."""
+        result = cli_runner.invoke(
+            cli, ["topic", "inspect", tree_jsonl_file, "--format", "json", "--uuid"]
+        )
+        assert result.exit_code == 0
+        json_start = result.output.find("{")
+        json_output = result.output[json_start:]
+        output = json.loads(json_output)
+        assert "path_to_uuid" in output
+        assert len(output["path_to_uuid"]) > 0

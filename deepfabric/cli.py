@@ -2096,12 +2096,20 @@ def topic() -> None:
     default="tree",
     help="Output format (default: tree)",
 )
+@click.option(
+    "--uuid",
+    "-u",
+    "show_uuid",
+    is_flag=True,
+    help="Show UUID/topic_id for each leaf node",
+)
 def topic_inspect(
     file: str,
     level: int | None,
     expand: int | None,
     show_all: bool,
     output_format: str,
+    show_uuid: bool,
 ) -> None:
     """Inspect a topic tree or graph file.
 
@@ -2133,6 +2141,10 @@ def topic_inspect(
     \b
         # Output as JSON for scripting
         deepfabric topic inspect topic_tree.jsonl --format json
+
+    \b
+        # Show UUIDs for each leaf node
+        deepfabric topic inspect topic_tree.jsonl --all --uuid
     """
     from .topic_inspector import detect_format, inspect_topic_file  # noqa: PLC0415
 
@@ -2157,11 +2169,16 @@ def topic_inspect(
                 output["expanded_paths"] = result.expanded_paths
             if result.all_paths is not None:
                 output["all_paths"] = result.all_paths
+            if show_uuid and result.path_to_uuid:
+                # Convert tuple keys to string for JSON serialization
+                output["path_to_uuid"] = {
+                    " > ".join(k): v for k, v in result.path_to_uuid.items()
+                }
             tui.console.print_json(json.dumps(output))
             return
 
         # Rich output (tree or table format)
-        _display_inspection_result(tui, result, output_format, level, expand, show_all)
+        _display_inspection_result(tui, result, output_format, level, expand, show_all, show_uuid)
 
     except FileNotFoundError as e:
         tui.error(str(e))
@@ -2181,6 +2198,7 @@ def _display_inspection_result(
     level: int | None,
     expand: int | None,
     show_all: bool,
+    show_uuid: bool = False,
 ) -> None:
     """Display inspection result using rich formatting."""
     from rich.panel import Panel  # noqa: PLC0415
@@ -2252,9 +2270,13 @@ def _display_inspection_result(
         if not result.expanded_paths:
             tui.console.print(f"  [dim]No topics at or below level {level}[/dim]")
         elif output_format == "table":
-            _display_paths_as_table(tui, result.expanded_paths)
+            _display_paths_as_table(
+                tui, result.expanded_paths, result.path_to_uuid if show_uuid else None
+            )
         else:
-            _display_paths_as_tree(tui, result.expanded_paths)
+            _display_paths_as_tree(
+                tui, result.expanded_paths, result.path_to_uuid if show_uuid else None
+            )
 
     # Show all paths with tree structure
     if show_all and result.all_paths:
@@ -2262,12 +2284,20 @@ def _display_inspection_result(
         tui.console.print("[cyan bold]Full Tree Structure:[/cyan bold]")
 
         if output_format == "table":
-            _display_paths_as_table(tui, result.all_paths)
+            _display_paths_as_table(
+                tui, result.all_paths, result.path_to_uuid if show_uuid else None
+            )
         else:
-            _display_paths_as_tree(tui, result.all_paths)
+            _display_paths_as_tree(
+                tui, result.all_paths, result.path_to_uuid if show_uuid else None
+            )
 
 
-def _display_paths_as_table(tui: "DeepFabricTUI", paths: list[list[str]]) -> None:
+def _display_paths_as_table(
+    tui: "DeepFabricTUI",
+    paths: list[list[str]],
+    path_to_uuid: dict[tuple[str, ...], str] | None = None,
+) -> None:
     """Display paths in a table format."""
     from rich.table import Table  # noqa: PLC0415
 
@@ -2275,20 +2305,33 @@ def _display_paths_as_table(tui: "DeepFabricTUI", paths: list[list[str]]) -> Non
     table.add_column("#", style="dim")
     table.add_column("Path", style="white")
     table.add_column("Depth", style="green")
+    if path_to_uuid:
+        table.add_column("UUID", style="yellow")
 
     for i, path in enumerate(paths[:100], 1):
         path_str = " > ".join(path)
         if len(path_str) > 80:
             path_str = path_str[:77] + "..."
-        table.add_row(str(i), path_str, str(len(path)))
+        if path_to_uuid:
+            uuid = path_to_uuid.get(tuple(path), "")
+            table.add_row(str(i), path_str, str(len(path)), uuid)
+        else:
+            table.add_row(str(i), path_str, str(len(path)))
 
     if len(paths) > 100:
-        table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "")
+        if path_to_uuid:
+            table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "", "")
+        else:
+            table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "")
 
     tui.console.print(table)
 
 
-def _display_paths_as_tree(tui: "DeepFabricTUI", paths: list[list[str]]) -> None:
+def _display_paths_as_tree(
+    tui: "DeepFabricTUI",
+    paths: list[list[str]],
+    path_to_uuid: dict[tuple[str, ...], str] | None = None,
+) -> None:
     """Display paths in an indented tree format."""
     from rich.tree import Tree as RichTree  # noqa: PLC0415
 
@@ -2309,13 +2352,13 @@ def _display_paths_as_tree(tui: "DeepFabricTUI", paths: list[list[str]]) -> None
         # Single root - show directly
         root_topic = paths[0][0]
         tree = RichTree(f"[bold]{root_topic}[/bold]")
-        _add_children_to_tree(tree, paths, 1)
+        _add_children_to_tree(tree, paths, 1, path_to_uuid=path_to_uuid)
         tui.console.print(tree)
     else:
         # Multiple roots - show each as a separate tree
         for root_topic, root_paths in list(root_groups.items())[:20]:
             tree = RichTree(f"[bold]{root_topic}[/bold]")
-            _add_children_to_tree(tree, root_paths, 1)
+            _add_children_to_tree(tree, root_paths, 1, path_to_uuid=path_to_uuid)
             tui.console.print(tree)
         if len(root_groups) > 20:
             tui.console.print(f"[dim]... and {len(root_groups) - 20} more topics[/dim]")
@@ -2326,6 +2369,7 @@ def _add_children_to_tree(
     paths: list[list[str]],
     depth: int,
     max_depth: int = 5,
+    path_to_uuid: dict[tuple[str, ...], str] | None = None,
 ) -> None:
     """Recursively add children to a rich tree (limited depth for display)."""
     if depth > max_depth:
@@ -2336,17 +2380,43 @@ def _add_children_to_tree(
 
     # Group paths by their element at current depth
     children: dict[str, list[list[str]]] = {}
+    leaf_paths: list[list[str]] = []  # Paths that end at current depth
+
     for path in paths:
         if len(path) > depth:
             child_topic = path[depth]
             if child_topic not in children:
                 children[child_topic] = []
             children[child_topic].append(path)
+        elif len(path) == depth:
+            # This path ends here (leaf node)
+            leaf_paths.append(path)
+
+    # Show leaf nodes with UUIDs if available
+    for leaf_path in leaf_paths:
+        if path_to_uuid:
+            uuid = path_to_uuid.get(tuple(leaf_path), "")
+            if uuid:
+                parent.add(f"[dim](UUID: {uuid})[/dim]")
 
     # Add children to tree
     for child_topic, child_paths in list(children.items())[:20]:
-        child_node = parent.add(child_topic)
-        _add_children_to_tree(child_node, child_paths, depth + 1, max_depth)
+        # Check if any child path ends at the next level (is a leaf)
+        is_leaf = any(len(p) == depth + 1 for p in child_paths)
+        if is_leaf and path_to_uuid:
+            # Find the UUID for this leaf
+            leaf_path = next((p for p in child_paths if len(p) == depth + 1), None)
+            if leaf_path:
+                uuid = path_to_uuid.get(tuple(leaf_path), "")
+                if uuid:
+                    child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
+                else:
+                    child_node = parent.add(child_topic)
+            else:
+                child_node = parent.add(child_topic)
+        else:
+            child_node = parent.add(child_topic)
+        _add_children_to_tree(child_node, child_paths, depth + 1, max_depth, path_to_uuid)
 
     if len(children) > 20:
         parent.add(f"[dim]... and {len(children) - 20} more siblings[/dim]")

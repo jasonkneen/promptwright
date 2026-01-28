@@ -1,8 +1,9 @@
 """Topic file inspection utilities for deepfabric CLI."""
 
+import hashlib
 import json
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,6 +23,8 @@ class TopicInspectionResult:
     all_paths: list[list[str]] | None
     metadata: dict[str, Any]
     source_file: str
+    # Maps path tuple to UUID/topic_id (for --uuid flag)
+    path_to_uuid: dict[tuple[str, ...], str] = field(default_factory=dict)
 
 
 def detect_format(file_path: str) -> Literal["tree", "graph"]:
@@ -68,27 +71,42 @@ def detect_format(file_path: str) -> Literal["tree", "graph"]:
     raise ValueError(f"Unable to detect format for: {file_path}")
 
 
-def _load_tree_paths(file_path: str) -> list[list[str]]:
+def _load_tree_paths(file_path: str) -> tuple[list[list[str]], dict[tuple[str, ...], str]]:
     """Load tree paths directly from JSONL without initializing LLM.
 
     Args:
         file_path: Path to the JSONL file
 
     Returns:
-        List of paths (each path is a list of topic strings)
+        Tuple of (paths, path_to_uuid mapping)
     """
     dict_list = read_topic_tree_from_jsonl(file_path)
-    return [d["path"] for d in dict_list if "path" in d]
+    paths = []
+    path_to_uuid: dict[tuple[str, ...], str] = {}
+
+    for d in dict_list:
+        if "path" not in d:
+            continue
+        path = d["path"]
+        paths.append(path)
+        # Generate hash-based ID from path (same as tree.py)
+        path_str = " > ".join(path)
+        topic_id = hashlib.sha256(path_str.encode()).hexdigest()[:16]
+        path_to_uuid[tuple(path)] = topic_id
+
+    return paths, path_to_uuid
 
 
-def _load_graph_data(file_path: str) -> tuple[list[list[str]], dict[str, Any]]:
+def _load_graph_data(
+    file_path: str,
+) -> tuple[list[list[str]], dict[str, Any], dict[tuple[str, ...], str]]:
     """Load graph data and extract paths and metadata.
 
     Args:
         file_path: Path to the JSON file
 
     Returns:
-        Tuple of (paths, metadata)
+        Tuple of (paths, metadata, path_to_uuid mapping)
     """
     # Load Graph - need minimal params for from_json
     params = {
@@ -100,7 +118,13 @@ def _load_graph_data(file_path: str) -> tuple[list[list[str]], dict[str, Any]]:
     }
     graph = Graph.from_json(file_path, params)
 
-    all_paths = graph.get_all_paths()
+    # Get paths with UUIDs
+    paths_with_ids = graph.get_all_paths_with_ids()
+    all_paths = [tp.path for tp in paths_with_ids]
+    path_to_uuid: dict[tuple[str, ...], str] = {
+        tuple(tp.path): tp.topic_id for tp in paths_with_ids
+    }
+
     metadata: dict[str, Any] = {
         "total_nodes": len(graph.nodes),
         "has_cycles": graph.has_cycle(),
@@ -121,7 +145,7 @@ def _load_graph_data(file_path: str) -> tuple[list[list[str]], dict[str, Any]]:
         if file_metadata.get("model"):
             metadata["model"] = file_metadata["model"]
 
-    return all_paths, metadata
+    return all_paths, metadata, path_to_uuid
 
 
 def inspect_topic_file(
@@ -145,9 +169,9 @@ def inspect_topic_file(
 
     # Load paths and metadata based on format
     if format_type == "graph":
-        all_paths, metadata = _load_graph_data(file_path)
+        all_paths, metadata, path_to_uuid = _load_graph_data(file_path)
     else:
-        all_paths = _load_tree_paths(file_path)
+        all_paths, path_to_uuid = _load_tree_paths(file_path)
         # Extract root topic from paths
         metadata = {}
         if all_paths:
@@ -199,4 +223,5 @@ def inspect_topic_file(
         all_paths=all_paths if show_all else None,
         metadata=metadata,
         source_file=file_path,
+        path_to_uuid=path_to_uuid,
     )
