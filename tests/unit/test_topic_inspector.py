@@ -136,6 +136,26 @@ class TestInspectTopicFile:
         # Level 1 shows unique topics at depth 1: Child1, Child2
         assert len(result.paths_at_level) == 2
 
+    def test_inspect_tree_file_with_expand_all(self, tree_jsonl_file):
+        """Test expand_depth=-1 returns all paths from level onwards."""
+        result = inspect_topic_file(tree_jsonl_file, level=1, expand_depth=-1)
+
+        assert result.expanded_paths is not None
+        # From level 1: Child1 > Grandchild1, Child1 > Grandchild2, Child2
+        assert len(result.expanded_paths) == 3
+        # Paths should start from level 1 (not include Root)
+        for path in result.expanded_paths:
+            assert path[0] in ("Child1", "Child2")
+
+    def test_inspect_tree_file_with_expand_limited(self, tree_jsonl_file):
+        """Test expand_depth=1 limits to 1 sublevel."""
+        result = inspect_topic_file(tree_jsonl_file, level=0, expand_depth=1)
+
+        assert result.expanded_paths is not None
+        # With expand_depth=1, max path length from level 0 is 2
+        for path in result.expanded_paths:
+            assert len(path) <= 2
+
     def test_inspect_tree_file_show_all(self, tree_jsonl_file):
         result = inspect_topic_file(tree_jsonl_file, show_all=True)
 
@@ -166,9 +186,7 @@ class TestTopicInspectCLI:
         assert "Total Paths" in result.output
 
     def test_inspect_with_level(self, cli_runner, tree_jsonl_file):
-        result = cli_runner.invoke(
-            cli, ["topic", "inspect", tree_jsonl_file, "--level", "2"]
-        )
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--level", "2"])
         assert result.exit_code == 0
         assert "Level 2" in result.output
 
@@ -178,9 +196,7 @@ class TestTopicInspectCLI:
         assert "Full Tree Structure" in result.output
 
     def test_inspect_json_format(self, cli_runner, tree_jsonl_file):
-        result = cli_runner.invoke(
-            cli, ["topic", "inspect", tree_jsonl_file, "--format", "json"]
-        )
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--format", "json"])
         assert result.exit_code == 0
         # Extract JSON from output (may have update notice before it)
         json_start = result.output.find("{")
@@ -209,9 +225,7 @@ class TestTopicInspectCLI:
         assert "Total Nodes" in result.output
 
     def test_inspect_graph_json_format(self, cli_runner, graph_json_file):
-        result = cli_runner.invoke(
-            cli, ["topic", "inspect", graph_json_file, "--format", "json"]
-        )
+        result = cli_runner.invoke(cli, ["topic", "inspect", graph_json_file, "--format", "json"])
         assert result.exit_code == 0
         # Extract JSON from output (may have update notice before it)
         json_start = result.output.find("{")
@@ -219,3 +233,27 @@ class TestTopicInspectCLI:
         output = json.loads(json_output)
         assert output["format"] == "graph"
         assert output["metadata"]["total_nodes"] == 3
+
+    def test_inspect_level_shows_simple_list(self, cli_runner, tree_jsonl_file):
+        """--level without --expand shows simple bullet list."""
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--level", "1"])
+        assert result.exit_code == 0
+        assert "Topics at Level 1" in result.output
+        # Should show bullet points, not tree structure
+        assert "•" in result.output
+
+    def test_inspect_level_with_expand_all(self, cli_runner, tree_jsonl_file):
+        """--level with --expand shows tree format with all sublevels."""
+        result = cli_runner.invoke(cli, ["topic", "inspect", tree_jsonl_file, "--level", "1", "--expand"])
+        assert result.exit_code == 0
+        assert "Subtree from Level 1" in result.output
+        assert "all sublevels" in result.output
+
+    def test_inspect_level_with_expand_depth(self, cli_runner, tree_jsonl_file):
+        """--level with --expand N shows tree format with N sublevels."""
+        result = cli_runner.invoke(
+            cli, ["topic", "inspect", tree_jsonl_file, "--level", "1", "--expand", "1"]
+        )
+        assert result.exit_code == 0
+        assert "Subtree from Level 1" in result.output
+        assert "1 sublevel(s)" in result.output

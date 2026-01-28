@@ -18,6 +18,7 @@ class TopicInspectionResult:
     total_paths: int
     max_depth: int
     paths_at_level: list[list[str]] | None
+    expanded_paths: list[list[str]] | None  # Paths from level onwards (with --expand)
     all_paths: list[list[str]] | None
     metadata: dict[str, Any]
     source_file: str
@@ -126,6 +127,7 @@ def _load_graph_data(file_path: str) -> tuple[list[list[str]], dict[str, Any]]:
 def inspect_topic_file(
     file_path: str,
     level: int | None = None,
+    expand_depth: int | None = None,
     show_all: bool = False,
 ) -> TopicInspectionResult:
     """Inspect a topic file and return structured results.
@@ -133,6 +135,7 @@ def inspect_topic_file(
     Args:
         file_path: Path to the topic file
         level: Specific level to show (0=root), or None
+        expand_depth: Number of sublevels to show (-1 for all), or None for no expansion
         show_all: Whether to include all paths in result
 
     Returns:
@@ -155,25 +158,38 @@ def inspect_topic_file(
     # Get unique topics at specific level if requested
     # Level 0 = root, Level 1 = children of root, etc.
     paths_at_level = None
+    expanded_paths = None
+
     if level is not None:
-        # Extract unique topics at the given depth position
+        # Extract unique topic names at the given depth position
         seen_topics: set[str] = set()
-        unique_paths: list[list[str]] = []
+        unique_topics: list[str] = []
         for path in all_paths:
             if len(path) > level:
-                # Get the path up to and including the requested level
-                path_to_level = path[: level + 1]
                 topic_at_level = path[level]
                 if topic_at_level not in seen_topics:
                     seen_topics.add(topic_at_level)
-                    unique_paths.append(path_to_level)
-        paths_at_level = unique_paths
+                    unique_topics.append(topic_at_level)
+        # Store as single-element paths for consistency
+        paths_at_level = [[t] for t in unique_topics]
+
+        # If expand_depth is set, get paths from level onwards
+        if expand_depth is not None:
+            expanded_paths = []
+            for path in all_paths:
+                if len(path) > level:
+                    # Trim path to start from the specified level
+                    trimmed_path = path[level:]
+                    # If expand_depth is -1, include all; otherwise limit depth
+                    if expand_depth == -1 or len(trimmed_path) <= expand_depth + 1:
+                        expanded_paths.append(trimmed_path)
 
     return TopicInspectionResult(
         format=format_type,
         total_paths=len(all_paths),
         max_depth=max_depth,
         paths_at_level=paths_at_level,
+        expanded_paths=expanded_paths,
         all_paths=all_paths if show_all else None,
         metadata=metadata,
         source_file=file_path,

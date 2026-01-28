@@ -2073,6 +2073,15 @@ def topic() -> None:
     help="Show topics at a specific depth level (0=root, 1=first children, etc.)",
 )
 @click.option(
+    "--expand",
+    "-e",
+    type=int,
+    default=None,
+    is_flag=False,
+    flag_value=-1,  # -1 means expand all levels
+    help="Show subtopics in tree format. Use alone for all levels, or specify depth (e.g., --expand 2)",
+)
+@click.option(
     "--all",
     "-a",
     "show_all",
@@ -2090,6 +2099,7 @@ def topic() -> None:
 def topic_inspect(
     file: str,
     level: int | None,
+    expand: int | None,
     show_all: bool,
     output_format: str,
 ) -> None:
@@ -2105,8 +2115,16 @@ def topic_inspect(
         deepfabric topic inspect topic_tree.jsonl
 
     \b
-        # Show all topics at depth level 2
+        # Show topics at depth level 2 (just topic names)
         deepfabric topic inspect topic_tree.jsonl --level 2
+
+    \b
+        # Show level 2 topics and all subtopics (tree format)
+        deepfabric topic inspect topic_tree.jsonl --level 2 --expand
+
+    \b
+        # Show level 2 topics and 1 sublevel only (tree format)
+        deepfabric topic inspect topic_tree.jsonl --level 2 --expand 1
 
     \b
         # Show entire tree with indentation
@@ -2122,7 +2140,7 @@ def topic_inspect(
 
     try:
         # Perform inspection
-        result = inspect_topic_file(file, level=level, show_all=show_all)
+        result = inspect_topic_file(file, level=level, expand_depth=expand, show_all=show_all)
 
         # Handle JSON output format
         if output_format == "json":
@@ -2135,13 +2153,15 @@ def topic_inspect(
             }
             if result.paths_at_level is not None:
                 output["paths_at_level"] = result.paths_at_level
+            if result.expanded_paths is not None:
+                output["expanded_paths"] = result.expanded_paths
             if result.all_paths is not None:
                 output["all_paths"] = result.all_paths
             tui.console.print_json(json.dumps(output))
             return
 
         # Rich output (tree or table format)
-        _display_inspection_result(tui, result, output_format, level, show_all)
+        _display_inspection_result(tui, result, output_format, level, expand, show_all)
 
     except FileNotFoundError as e:
         tui.error(str(e))
@@ -2159,6 +2179,7 @@ def _display_inspection_result(
     result: "TopicInspectionResult",
     output_format: str,
     level: int | None,
+    expand: int | None,
     show_all: bool,
 ) -> None:
     """Display inspection result using rich formatting."""
@@ -2209,21 +2230,31 @@ def _display_inspection_result(
 
     tui.console.print(Panel(stats_table, title="Statistics", border_style="dim"))
 
-    # Show level-specific topics
-    if level is not None and result.paths_at_level is not None:
+    # Show level-specific topics (without expand) - simple list of topic names
+    if level is not None and expand is None and result.paths_at_level is not None:
         tui.console.print()
         tui.console.print(f"[cyan bold]Topics at Level {level}:[/cyan bold]")
 
         if not result.paths_at_level:
             tui.console.print(f"  [dim]No topics at level {level}[/dim]")
-        elif output_format == "table":
-            _display_paths_as_table(tui, result.paths_at_level)
         else:
-            for path in result.paths_at_level[:50]:  # Limit display
-                tui.console.print(f"  {' > '.join(path)}")
-            if len(result.paths_at_level) > 50:
-                remaining = len(result.paths_at_level) - 50
-                tui.console.print(f"  [dim]... and {remaining} more[/dim]")
+            # Display as simple list of topic names
+            for topic_path in result.paths_at_level:
+                topic_name = topic_path[0] if topic_path else ""
+                tui.console.print(f"  • {topic_name}")
+
+    # Show expanded subtree from level (with --expand)
+    if level is not None and expand is not None and result.expanded_paths is not None:
+        tui.console.print()
+        depth_info = "all sublevels" if expand == -1 else f"{expand} sublevel(s)"
+        tui.console.print(f"[cyan bold]Subtree from Level {level} ({depth_info}):[/cyan bold]")
+
+        if not result.expanded_paths:
+            tui.console.print(f"  [dim]No topics at or below level {level}[/dim]")
+        elif output_format == "table":
+            _display_paths_as_table(tui, result.expanded_paths)
+        else:
+            _display_paths_as_tree(tui, result.expanded_paths)
 
     # Show all paths with tree structure
     if show_all and result.all_paths:
