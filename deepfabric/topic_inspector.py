@@ -110,15 +110,7 @@ def _load_graph_data(
     Returns:
         Tuple of (paths, metadata, path_to_uuid mapping, topic_to_uuid mapping)
     """
-    # Load Graph - need minimal params for from_json
-    params = {
-        "topic_prompt": "loaded",
-        "model_name": "placeholder/model",
-        "degree": 3,
-        "depth": 2,
-        "temperature": 0.7,
-    }
-    graph = Graph.from_json(file_path, params)
+    graph = Graph.load(file_path)
 
     # Get paths with UUIDs (for leaf nodes)
     paths_with_ids = graph.get_all_paths_with_ids()

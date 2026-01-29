@@ -2419,6 +2419,163 @@ def _add_children_to_tree(
         parent.add(f"[dim]... and {len(children) - 20} more siblings[/dim]")
 
 
+@topic.command("prune")
+@click.argument("file", type=click.Path(exists=True))
+@click.option(
+    "--level",
+    "-l",
+    type=int,
+    default=None,
+    help="Prune all nodes below this depth level (0=root, 1=children, etc.)",
+)
+@click.option(
+    "--uuid",
+    "-u",
+    type=str,
+    default=None,
+    help="Remove the node with this UUID and its entire subtree",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(),
+    default=None,
+    help="Output file path (default: auto-generated from input filename)",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Overwrite the input file instead of creating a new one",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be removed without making changes",
+)
+def topic_prune(
+    file: str,
+    level: int | None,
+    uuid: str | None,
+    output: str | None,
+    force: bool,
+    dry_run: bool,
+) -> None:
+    """Prune a topic graph by removing nodes.
+
+    Supports two modes:
+
+    \b
+        # Remove all nodes below depth level 2
+        deepfabric topic prune topic_graph.json --level 2
+
+    \b
+        # Remove a specific node and its subtree by UUID
+        deepfabric topic prune topic_graph.json --uuid abc-123-def
+
+    \b
+        # Preview what would be removed (no file written)
+        deepfabric topic prune topic_graph.json --level 1 --dry-run
+
+    \b
+        # Overwrite the original file
+        deepfabric topic prune topic_graph.json --uuid abc-123 --force
+    """
+    from .graph_pruner import (  # noqa: PLC0415
+        load_graph_for_pruning,
+        prune_graph_at_level,
+        prune_graph_by_uuid,
+    )
+
+    tui = get_tui()
+
+    # Validate: exactly one mode must be specified
+    if level is None and uuid is None:
+        tui.error("Specify either --level or --uuid")
+        sys.exit(1)
+    if level is not None and uuid is not None:
+        tui.error("Cannot use --level and --uuid together")
+        sys.exit(1)
+
+    try:
+        if dry_run:
+            graph = load_graph_for_pruning(file)
+            total_nodes = len(graph.nodes)
+
+            tui.console.print()
+            tui.console.print("[bold]DRY RUN[/bold] — no changes will be made")
+            tui.console.print()
+
+            if level is not None:
+                # BFS to compute node depths
+                node_depths: dict[int, int] = {}
+                queue: list[tuple] = [(graph.root, 0)]
+                visited: set[int] = set()
+                while queue:
+                    current, d = queue.pop(0)
+                    if current.id in visited:
+                        continue
+                    visited.add(current.id)
+                    node_depths[current.id] = d
+                    for child in current.children:
+                        if child.id not in visited:
+                            queue.append((child, d + 1))
+
+                to_remove = {nid for nid, d in node_depths.items() if d > level}
+                tui.console.print(f"  Graph:         {total_nodes} unique nodes")
+                tui.console.print(f"  Would remove:  {len(to_remove)} nodes below level {level}")
+                tui.console.print(f"  Would keep:    {total_nodes - len(to_remove)} nodes")
+            else:
+                target = graph.find_node_by_uuid(uuid)
+                if target is None:
+                    tui.error(f"No node found with UUID: {uuid}")
+                    sys.exit(1)
+
+                # BFS to count subtree
+                subtree_count = 0
+                bfs_queue = [target]
+                visited_ids: set[int] = set()
+                while bfs_queue:
+                    current = bfs_queue.pop(0)
+                    if current.id in visited_ids:
+                        continue
+                    visited_ids.add(current.id)
+                    subtree_count += 1
+                    for child in current.children:
+                        if child.id not in visited_ids:
+                            bfs_queue.append(child)
+
+                tui.console.print(f"  Graph:         {total_nodes} unique nodes")
+                tui.console.print(
+                    f"  Target:        {target.topic}",
+                    highlight=False,
+                )
+                tui.console.print(f"  Would remove:  {subtree_count} nodes (including subtree)")
+                tui.console.print(f"  Would keep:    {total_nodes - subtree_count} nodes")
+            return
+
+        # Determine output path
+        output_path = file if force else output
+
+        if level is not None:
+            result = prune_graph_at_level(file, level, output_path)
+        else:
+            result = prune_graph_by_uuid(file, uuid, output_path)
+
+        tui.console.print()
+        tui.success("Graph pruned successfully")
+        tui.console.print(f"  Removed:   {result.removed_count} nodes")
+        tui.console.print(f"  Remaining: {result.remaining_nodes} nodes, {result.remaining_paths} paths")
+        tui.console.print(f"  Saved to:  {result.output_path}")
+
+    except FileNotFoundError as e:
+        tui.error(str(e))
+        sys.exit(1)
+    except ValueError as e:
+        tui.error(str(e))
+        sys.exit(1)
+
+
 # Register the topic command group
 cli.add_command(topic)
 

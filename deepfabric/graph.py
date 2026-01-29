@@ -211,6 +211,139 @@ class Graph(TopicModel):
             if parent_node not in child_node.parents:
                 child_node.parents.append(parent_node)
 
+    def find_node_by_uuid(self, uuid: str) -> Node | None:
+        """Find a node by its UUID.
+
+        Args:
+            uuid: The UUID string to search for.
+
+        Returns:
+            The Node if found, None otherwise.
+        """
+        for node in self.nodes.values():
+            if node.metadata.get("uuid") == uuid:
+                return node
+        return None
+
+    def remove_node(self, node_id: int) -> None:
+        """Remove a single node from the graph, cleaning up bidirectional references.
+
+        Does not remove children — use remove_subtree() for cascading removal.
+
+        Args:
+            node_id: The ID of the node to remove.
+
+        Raises:
+            ValueError: If node_id is the root node or does not exist.
+        """
+        if node_id == self.root.id:
+            raise ValueError("Cannot remove the root node")  # noqa: TRY003
+        node = self.nodes.get(node_id)
+        if node is None:
+            raise ValueError(f"Node {node_id} not found in graph")  # noqa: TRY003
+
+        for parent in node.parents:
+            if node in parent.children:
+                parent.children.remove(node)
+
+        for child in node.children:
+            if node in child.parents:
+                child.parents.remove(node)
+
+        del self.nodes[node_id]
+
+    def remove_subtree(self, node_id: int) -> list[int]:
+        """Remove a node and all its descendants from the graph.
+
+        Args:
+            node_id: The ID of the node to remove (along with all descendants).
+
+        Returns:
+            List of removed node IDs.
+
+        Raises:
+            ValueError: If node_id is the root node or does not exist.
+        """
+        if node_id == self.root.id:
+            raise ValueError("Cannot remove the root node")  # noqa: TRY003
+        node = self.nodes.get(node_id)
+        if node is None:
+            raise ValueError(f"Node {node_id} not found in graph")  # noqa: TRY003
+
+        # BFS to collect all descendant node IDs
+        to_remove: list[int] = []
+        queue = [node]
+        visited: set[int] = set()
+        while queue:
+            current = queue.pop(0)
+            if current.id in visited:
+                continue
+            visited.add(current.id)
+            to_remove.append(current.id)
+            for child in current.children:
+                if child.id not in visited:
+                    queue.append(child)
+
+        # Remove in reverse order (leaves first)
+        for nid in reversed(to_remove):
+            self.remove_node(nid)
+
+        return to_remove
+
+    def prune_at_level(self, max_depth: int) -> list[int]:
+        """Remove all nodes below the given depth level.
+
+        Nodes at exactly max_depth become leaf nodes. Root is depth 0.
+
+        Args:
+            max_depth: Maximum depth to keep (inclusive).
+                       0 = keep only root, 1 = root and its children, etc.
+
+        Returns:
+            List of removed node IDs.
+
+        Raises:
+            ValueError: If max_depth is negative.
+        """
+        if max_depth < 0:
+            raise ValueError("max_depth must be non-negative")  # noqa: TRY003
+
+        # BFS from root to compute node depths
+        node_depths: dict[int, int] = {}
+        queue: list[tuple[Node, int]] = [(self.root, 0)]
+        visited: set[int] = set()
+        while queue:
+            current, depth = queue.pop(0)
+            if current.id in visited:
+                continue
+            visited.add(current.id)
+            node_depths[current.id] = depth
+            for child in current.children:
+                if child.id not in visited:
+                    queue.append((child, depth + 1))
+
+        to_remove_set = {nid for nid, d in node_depths.items() if d > max_depth}
+
+        # Sever children links from boundary nodes
+        for nid, d in node_depths.items():
+            if d == max_depth:
+                self.nodes[nid].children = [
+                    c for c in self.nodes[nid].children if c.id not in to_remove_set
+                ]
+
+        # Remove deeper nodes
+        for nid in to_remove_set:
+            node = self.nodes[nid]
+            for parent in node.parents:
+                if node in parent.children:
+                    parent.children.remove(node)
+            for child in node.children:
+                if node in child.parents:
+                    child.parents.remove(node)
+            del self.nodes[nid]
+
+        return list(to_remove_set)
+
     def to_pydantic(self) -> GraphModel:
         """Converts the runtime graph to its Pydantic model representation."""
         return GraphModel(
@@ -266,6 +399,36 @@ class Graph(TopicModel):
                 graph.add_edge(node_model.id, child_id)
 
         graph._next_node_id = max(graph.nodes.keys()) + 1
+        return graph
+
+    @classmethod
+    def load(cls, json_path: str) -> "Graph":
+        """Load a graph from JSON without initializing LLM client.
+
+        Intended for inspection and manipulation operations that don't
+        require LLM generation capabilities. Restores provider, model,
+        and temperature from the file metadata so saves preserve them.
+        """
+        params = {
+            "topic_prompt": "loaded",
+            "model_name": "placeholder/model",
+            "degree": 3,
+            "depth": 2,
+            "temperature": 0.7,
+        }
+        graph = cls.from_json(json_path, params)
+
+        # Restore original metadata so save() preserves provenance
+        with open(json_path) as f:
+            raw = json.load(f)
+        file_meta = raw.get("metadata") or {}
+        if file_meta.get("provider"):
+            graph.provider = file_meta["provider"]
+        if file_meta.get("model"):
+            graph.model_name = file_meta["model"]
+        if file_meta.get("temperature") is not None:
+            graph.temperature = file_meta["temperature"]
+
         return graph
 
     def visualize(self, save_path: str) -> None:
