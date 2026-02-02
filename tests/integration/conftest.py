@@ -71,12 +71,11 @@ def assert_generation_result(result, generator, min_samples=1, context=""):
 
     lines.append(f"Total failures: {len(generator.failed_samples)}")
 
-    failure_types = {k: len(v) for k, v in generator.failure_analysis.items()}
-    if any(v > 0 for v in failure_types.values()):
+    failure_counts = {k: len(v) for k, v in generator.failure_analysis.items() if v}
+    if failure_counts:
         lines.append("Failure breakdown:")
-        for ftype, count in failure_types.items():
-            if count > 0:
-                lines.append(f"  {ftype}: {count}")
+        for ftype, count in sorted(failure_counts.items()):
+            lines.append(f"  {ftype}: {count}")
 
     for i, f in enumerate(generator.failed_samples[:5], 1):
         error_msg = f.get("error", str(f)) if isinstance(f, dict) else str(f)
