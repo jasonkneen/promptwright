@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import time
 import warnings
@@ -245,7 +246,7 @@ class Tree(TopicModel):
     @staticmethod
     def _path_to_id(path: list[str]) -> str:
         """Compute a deterministic topic ID from a tree path."""
-        return "/".join(path)
+        return hashlib.sha256(json.dumps(path).encode()).hexdigest()[:16]
 
     def _add_path(self, path: list[str]) -> None:
         """Add a path to the tree.
