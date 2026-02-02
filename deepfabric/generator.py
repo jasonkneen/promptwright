@@ -1461,10 +1461,10 @@ class DataSetGenerator:
         topic_model_type: str | None = None,
     ) -> AsyncGenerator[dict | HFDataset, None]:
         """Run the main generation loop yielding progress events."""
-        # Verify topic paths cover all expected samples
+        # Verify topic paths cover all expected samples (only when a topic model is used)
         expected_prompts = num_steps * batch_size
         actual_paths = len(topic_paths) if topic_paths else 0
-        if actual_paths < expected_prompts:
+        if topic_paths and actual_paths < expected_prompts:
             logger.warning(
                 "Topic paths (%d) < expected samples (%d). Steps beyond path %d will produce 0 samples.",
                 actual_paths,

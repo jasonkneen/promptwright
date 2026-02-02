@@ -6,7 +6,12 @@ import pytest
 
 from deepfabric import DataSetGenerator, Graph
 
-from .conftest import requires_gemini, requires_openai
+from .conftest import (
+    assert_generation_result,
+    assert_topic_build_result,
+    requires_gemini,
+    requires_openai,
+)
 
 
 @pytest.fixture
@@ -48,14 +53,18 @@ def small_topic_graph(openai_config):
             pass
 
     asyncio.run(build_graph())
+    assert_topic_build_result(
+        graph.get_all_paths(), graph, min_paths=1, context="small_topic_graph fixture"
+    )
     return graph
 
 
+@requires_openai
 class TestDataSetGeneratorOpenAI:
     """Integration tests for DataSetGenerator with OpenAI provider."""
 
-    @requires_openai
     @pytest.mark.openai
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_basic_generation(self, openai_generator):
         """Test basic dataset generation without topic model."""
         result = openai_generator.create_data(
@@ -63,12 +72,13 @@ class TestDataSetGeneratorOpenAI:
             batch_size=2,
         )
 
-        # Result should be a HuggingFace Dataset
         assert result is not None
-        assert len(result) >= 1
+        assert_generation_result(
+            result, openai_generator, context="basic generation (no topic model)"
+        )
 
-    @requires_openai
     @pytest.mark.openai
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_generation_with_topic_model(self, openai_generator, small_topic_graph):
         """Test dataset generation with a topic graph."""
         result = openai_generator.create_data(
@@ -78,26 +88,22 @@ class TestDataSetGeneratorOpenAI:
         )
 
         assert result is not None
-        assert len(result) >= 1
+        assert_generation_result(result, openai_generator, context="generation with topic model")
 
-    @requires_openai
     @pytest.mark.openai
-    def test_async_generation(self, openai_generator):
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    async def test_async_generation(self, openai_generator):
         """Test async dataset generation."""
-
-        async def run_async():
-            return await openai_generator.create_data_async(
-                num_steps=1,
-                batch_size=2,
-            )
-
-        result = asyncio.run(run_async())
+        result = await openai_generator.create_data_async(
+            num_steps=1,
+            batch_size=2,
+        )
 
         assert result is not None
-        assert len(result) >= 1
+        assert_generation_result(result, openai_generator, context="async generation")
 
-    @requires_openai
     @pytest.mark.openai
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_generation_with_cot(self, openai_config):
         """Test generation with cot conversation type."""
         generator = DataSetGenerator(
@@ -115,40 +121,33 @@ class TestDataSetGeneratorOpenAI:
         )
 
         assert result is not None
-        assert len(result) >= 1
+        assert_generation_result(result, generator, context="cot generation")
 
 
+@requires_gemini
 class TestDataSetGeneratorGemini:
     """Integration tests for DataSetGenerator with Gemini provider."""
 
-    @requires_gemini
     @pytest.mark.gemini
-    def test_basic_generation(self, gemini_generator):
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    async def test_basic_generation(self, gemini_generator):
         """Test basic dataset generation with Gemini."""
-
-        async def run_async():
-            return await gemini_generator.create_data_async(
-                num_steps=1,
-                batch_size=2,
-            )
-
-        result = asyncio.run(run_async())
+        result = await gemini_generator.create_data_async(
+            num_steps=1,
+            batch_size=2,
+        )
 
         assert result is not None
-        assert len(result) >= 1
+        assert_generation_result(result, gemini_generator, context="Gemini basic generation")
 
-    @requires_gemini
     @pytest.mark.gemini
-    def test_generation_saves_to_file(self, tmp_path, gemini_generator):
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
+    async def test_generation_saves_to_file(self, tmp_path, gemini_generator):
         """Test that generated data can be saved."""
-
-        async def run_async():
-            return await gemini_generator.create_data_async(
-                num_steps=1,
-                batch_size=2,
-            )
-
-        asyncio.run(run_async())
+        await gemini_generator.create_data_async(
+            num_steps=1,
+            batch_size=2,
+        )
 
         # Save dataset
         out_path = tmp_path / "dataset.jsonl"

@@ -1,21 +1,21 @@
 """Integration tests for Graph with real API calls."""
 
-import asyncio
 import json
 
 import pytest  # pyright: ignore[reportMissingImports]
 
 from deepfabric import Graph
 
-from .conftest import requires_gemini, requires_openai
+from .conftest import assert_topic_build_result, requires_gemini, requires_openai
 
 
+@requires_openai
 class TestGraphOpenAI:
     """Integration tests for Graph with OpenAI provider."""
 
-    @requires_openai
     @pytest.mark.openai
-    def test_graph_builds_basic(self, openai_config):
+    @pytest.mark.flaky(reruns=1, reruns_delay=3)
+    async def test_graph_builds_basic(self, openai_config):
         """Test basic graph building with OpenAI."""
         degree = 2
         depth = 1
@@ -30,10 +30,7 @@ class TestGraphOpenAI:
             depth=depth,
         )
 
-        async def run_build():
-            return [event async for event in graph.build_async()]
-
-        events = asyncio.run(run_build())
+        events = [event async for event in graph.build_async()]
 
         # Verify build completion
         completes = [e for e in events if e.get("event") == "build_complete"]
@@ -41,12 +38,12 @@ class TestGraphOpenAI:
 
         # Verify paths were built
         paths = graph.get_all_paths()
-        assert len(paths) >= 1
+        assert_topic_build_result(paths, graph, min_paths=1, context="graph basic build (OpenAI)")
         assert all(p[0] == topic for p in paths)
 
-    @requires_openai
     @pytest.mark.openai
-    def test_graph_save_and_load_roundtrip(self, tmp_path, openai_config):
+    @pytest.mark.flaky(reruns=1, reruns_delay=3)
+    async def test_graph_save_and_load_roundtrip(self, tmp_path, openai_config):
         """Test saving and loading a graph with OpenAI."""
         degree = 2
         depth = 1
@@ -61,11 +58,8 @@ class TestGraphOpenAI:
             depth=depth,
         )
 
-        async def build_graph():
-            async for _ in graph.build_async():
-                pass
-
-        asyncio.run(build_graph())
+        async for _ in graph.build_async():
+            pass
 
         # Save to file
         out_path = tmp_path / "graph.json"
@@ -90,12 +84,13 @@ class TestGraphOpenAI:
         assert new_graph.get_all_paths() == graph.get_all_paths()
 
 
+@requires_gemini
 class TestGraphGemini:
     """Integration tests for Graph with Gemini provider."""
 
-    @requires_gemini
     @pytest.mark.gemini
-    def test_graph_builds_basic(self, gemini_config):
+    @pytest.mark.flaky(reruns=1, reruns_delay=3)
+    async def test_graph_builds_basic(self, gemini_config):
         """Test basic graph building with Gemini."""
         degree = 2
         depth = 1
@@ -110,10 +105,7 @@ class TestGraphGemini:
             depth=depth,
         )
 
-        async def run_build():
-            return [event async for event in graph.build_async()]
-
-        events = asyncio.run(run_build())
+        events = [event async for event in graph.build_async()]
 
         # Verify build completion
         completes = [e for e in events if e.get("event") == "build_complete"]
@@ -121,12 +113,12 @@ class TestGraphGemini:
 
         # Verify paths were built
         paths = graph.get_all_paths()
-        assert len(paths) >= 1
+        assert_topic_build_result(paths, graph, min_paths=1, context="graph basic build (Gemini)")
         assert all(p[0] == topic for p in paths)
 
-    @requires_gemini
     @pytest.mark.gemini
-    def test_graph_no_cycles(self, gemini_config):
+    @pytest.mark.flaky(reruns=1, reruns_delay=3)
+    async def test_graph_no_cycles(self, gemini_config):
         """Test that generated graphs have no cycles."""
         graph = Graph(
             topic_prompt="Software Engineering",
@@ -137,14 +129,11 @@ class TestGraphGemini:
             depth=2,
         )
 
-        async def build_graph():
-            async for _ in graph.build_async():
-                pass
-
-        asyncio.run(build_graph())
+        async for _ in graph.build_async():
+            pass
 
         # Verify no cycles
         assert not graph.has_cycle()
         # Verify we got paths
         paths = graph.get_all_paths()
-        assert len(paths) >= 1
+        assert_topic_build_result(paths, graph, min_paths=1, context="graph no cycles (Gemini)")
