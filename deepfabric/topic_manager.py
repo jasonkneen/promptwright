@@ -45,6 +45,8 @@ async def _process_graph_events(graph: Graph, debug: bool = False) -> dict | Non
     progress_reporter = ProgressReporter()
     progress_reporter.attach(tui)
     graph.progress_reporter = progress_reporter
+    if hasattr(graph, "llm_client"):
+        graph.llm_client.retry_handler.progress_reporter = progress_reporter
 
     tui_started = False
 
@@ -116,6 +118,8 @@ async def _process_tree_events(tree: Tree, debug: bool = False) -> dict | None:
     progress_reporter = ProgressReporter()
     progress_reporter.attach(tui)
     tree.progress_reporter = progress_reporter
+    if hasattr(tree, "llm_client"):
+        tree.llm_client.retry_handler.progress_reporter = progress_reporter
 
     final_event = None
     try:
@@ -129,6 +133,8 @@ async def _process_tree_events(tree: Tree, debug: bool = False) -> dict | None:
                     tui.add_failure()
                     if debug and "error" in event:
                         get_tui().error(f"Debug: Tree generation failure - {event['error']}")
+                else:
+                    tui.advance_simple_progress()
             elif event["event"] == "build_complete":
                 total_paths = (
                     int(event["total_paths"]) if isinstance(event["total_paths"], str | int) else 0
@@ -233,8 +239,22 @@ def load_or_build_topic_model(
     tui = get_tui()
 
     if topics_load:
-        # Determine mode from config or file extension
-        is_graph = config.topics.mode == "graph" or topics_load.endswith(".json")
+        # Config mode takes precedence; file extension is only used to warn on mismatch
+        is_graph = config.topics.mode == "graph"
+
+        # Warn if file extension doesn't match the configured mode
+        if not is_graph and topics_load.endswith(".json"):
+            tui.warning(
+                f"File '{topics_load}' has .json extension (typically a graph) "
+                f"but mode is '{config.topics.mode}'. "
+                "If this is a graph set mode: graph in config."
+            )
+        elif is_graph and topics_load.endswith(".jsonl"):
+            tui.warning(
+                f"File '{topics_load}' has .jsonl extension (typically a tree) "
+                "but mode is 'graph'. "
+                "If this is a tree set mode: tree in config."
+            )
 
         if is_graph:
             tui.info(f"Reading topic graph from JSON file: {topics_load}")
