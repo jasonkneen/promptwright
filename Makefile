@@ -30,7 +30,7 @@ test-integration:
 	$(PYTEST_INTEGRATION) --maxfail=1
 
 test-integration-verbose:
-	uv run pytest tests/integration -v -rA --durations=10
+	$(PYTEST_INTEGRATION) -s -rA --durations=10 --tb=long
 
 test-integration-openai:
 	$(PYTEST_INTEGRATION) -m openai
