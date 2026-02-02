@@ -149,6 +149,7 @@ class TestTreeIntegration:
                 self.finished = []
                 self.failures = 0
                 self.chunks = []
+                self.progress_advances = 0
 
             # Methods used by topic_manager
             def start_building(
@@ -160,7 +161,7 @@ class TestTreeIntegration:
                 self.failures += 1
 
             def advance_simple_progress(self) -> None:
-                pass
+                self.progress_advances += 1
 
             def stop_live(self) -> None:
                 pass
@@ -189,6 +190,7 @@ class TestTreeIntegration:
         assert len(fake_tui.finished) == 1
         assert fake_tui.finished[0][0] == degree**depth
         assert fake_tui.failures == 0
+        assert fake_tui.progress_advances == degree**depth
         # Streaming should have produced at least one chunk
         assert isinstance(fake_tui.chunks, list)
         assert len(fake_tui.chunks) >= 1
