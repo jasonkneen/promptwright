@@ -311,19 +311,11 @@ class Tree(TopicModel):
                 source="tree_generation",
             )
 
-            # Extract and validate subtopics
+            # Extract subtopics — accept whatever the LLM returned
             subtopics = topic_response.subtopics
-            if len(subtopics) >= num_subtopics:
-                return subtopics[:num_subtopics]
-
-            # If insufficient subtopics, pad with defaults
-            while len(subtopics) < num_subtopics:
-                subtopics.append(f"subtopic_{len(subtopics) + 1}_for_{node_path[-1]}")
-
             return subtopics[:num_subtopics]
 
         except Exception as e:
-            # Log the failure and return default subtopics
             self.failed_generations.append(
                 {
                     "node_path": node_path,
@@ -331,9 +323,7 @@ class Tree(TopicModel):
                     "timestamp": time.time(),
                 }
             )
-
-            # Generate default subtopics
-            return [f"subtopic_{i + 1}_for_{node_path[-1]}" for i in range(num_subtopics)]
+            return []
 
     def _detect_domain(self, system_prompt: str, node_path: list[str]) -> str:
         """Detect the appropriate domain for prompt examples based on context."""
