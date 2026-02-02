@@ -159,6 +159,12 @@ class TestTreeIntegration:
             def add_failure(self) -> None:
                 self.failures += 1
 
+            def advance_simple_progress(self) -> None:
+                pass
+
+            def stop_live(self) -> None:
+                pass
+
             def finish_building(self, total_paths: int, failed_generations: int) -> None:
                 self.finished.append((total_paths, failed_generations))
 
