@@ -145,7 +145,7 @@ class GenerateOptions(BaseModel):
     batch_size: int | None = None
     base_url: str | None = None
     include_system_message: bool | None = None
-    mode: Literal["tree", "graph"] = Field(default="tree")
+    mode: Literal["tree", "graph"] | None = Field(default=None)
     debug: bool = False
     topic_only: bool = False
     tui: Literal["rich", "simple"] = Field(default="rich")
@@ -338,7 +338,7 @@ def _load_and_prepare_generation_context(
     # Skip path validation for topic-only mode since we're not generating dataset samples
     if not skip_path_validation:
         validate_path_requirements(
-            mode=options.mode,
+            mode=config.topics.mode,
             depth=final_depth,
             degree=final_degree,
             num_samples=final_num_samples,
@@ -347,7 +347,7 @@ def _load_and_prepare_generation_context(
         )
 
         show_validation_success(
-            mode=options.mode,
+            mode=config.topics.mode,
             depth=final_depth,
             degree=final_degree,
             num_samples=final_num_samples,
@@ -661,8 +661,8 @@ def _run_generation(
 @click.option(
     "--mode",
     type=click.Choice(["tree", "graph"]),
-    default="tree",
-    help="Topic generation mode (default: tree)",
+    default=None,
+    help="Topic generation mode (default: graph)",
 )
 @click.option(
     "--debug",

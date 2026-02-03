@@ -87,7 +87,7 @@ class TopicsConfig(BaseModel):
         ..., min_length=1, description="The initial prompt to start topic generation"
     )
     mode: Literal["tree", "graph"] = Field(
-        default="tree", description="Topic generation mode: tree or graph"
+        default="graph", description="Topic generation mode: tree or graph"
     )
     system_prompt: str = Field(
         default="", description="System prompt for topic exploration and generation"
