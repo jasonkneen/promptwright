@@ -2,15 +2,16 @@
 
 import json
 import tempfile
+
 from pathlib import Path
 
 import pytest
+
 from click.testing import CliRunner
 
 from deepfabric.cli import cli
 from deepfabric.graph import Graph
 from deepfabric.graph_pruner import (
-    PruneResult,
     _derive_output_path,
     load_graph_for_pruning,
     prune_graph_at_level,
@@ -128,7 +129,7 @@ class TestFindNodeByUuid:
         node = graph.find_node_by_uuid("uuid-a1")
         assert node is not None
         assert node.topic == "A1"
-        assert node.id == 3
+        assert node.id == 3  # noqa: PLR2004
 
     def test_find_root(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
@@ -145,21 +146,21 @@ class TestRemoveNode:
     def test_remove_leaf(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
         graph.remove_node(7)  # A1a
-        assert 7 not in graph.nodes
+        assert 7 not in graph.nodes  # noqa: PLR2004
         # Parent A1 should no longer list A1a as child
         a1 = graph.nodes[3]
-        assert all(c.id != 7 for c in a1.children)
+        assert all(c.id != 7 for c in a1.children)  # noqa: PLR2004
 
     def test_remove_internal_node(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
         graph.remove_node(3)  # A1 (has children A1a, A1b)
-        assert 3 not in graph.nodes
+        assert 3 not in graph.nodes  # noqa: PLR2004
         # Parent A should no longer list A1
         a = graph.nodes[1]
-        assert all(c.id != 3 for c in a.children)
+        assert all(c.id != 3 for c in a.children)  # noqa: PLR2004
         # Children A1a, A1b should no longer list A1 as parent
-        assert all(p.id != 3 for p in graph.nodes[7].parents)
-        assert all(p.id != 3 for p in graph.nodes[8].parents)
+        assert all(p.id != 3 for p in graph.nodes[7].parents)  # noqa: PLR2004
+        assert all(p.id != 3 for p in graph.nodes[8].parents)  # noqa: PLR2004
 
     def test_remove_root_raises(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
@@ -177,14 +178,14 @@ class TestRemoveSubtree:
         graph = Graph.load(deep_graph_json_file)
         removed = graph.remove_subtree(7)  # A1a (leaf)
         assert removed == [7]
-        assert 7 not in graph.nodes
-        assert len(graph.nodes) == 8
+        assert 7 not in graph.nodes  # noqa: PLR2004
+        assert len(graph.nodes) == 8  # noqa: PLR2004
 
     def test_remove_internal_subtree(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
         removed = graph.remove_subtree(1)  # A -> A1 -> A1a, A1b + A2
         assert set(removed) == {1, 3, 4, 7, 8}
-        assert len(graph.nodes) == 4  # Root, B, B1, B2
+        assert len(graph.nodes) == 4  # noqa: PLR2004  # Root, B, B1, B2
         # Root should no longer have A as child
         assert all(c.id != 1 for c in graph.root.children)
 
@@ -199,14 +200,14 @@ class TestRemoveSubtree:
         # A should now have only A2 as child
         a = graph.nodes[1]
         assert len(a.children) == 1
-        assert a.children[0].id == 4
+        assert a.children[0].id == 4  # noqa: PLR2004
 
 
 class TestPruneAtLevel:
     def test_prune_level_0(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
         removed = graph.prune_at_level(0)
-        assert len(removed) == 8  # Everything except root
+        assert len(removed) == 8  # noqa: PLR2004  # Everything except root
         assert len(graph.nodes) == 1
         assert graph.root.children == []
 
@@ -214,8 +215,8 @@ class TestPruneAtLevel:
         graph = Graph.load(deep_graph_json_file)
         removed = graph.prune_at_level(1)
         # Should keep Root, A, B (3 nodes), remove the rest (6 nodes)
-        assert len(removed) == 6
-        assert len(graph.nodes) == 3
+        assert len(removed) == 6  # noqa: PLR2004
+        assert len(graph.nodes) == 3  # noqa: PLR2004
         assert set(graph.nodes.keys()) == {0, 1, 2}
         # A and B should now be leaves
         assert graph.nodes[1].children == []
@@ -225,8 +226,8 @@ class TestPruneAtLevel:
         graph = Graph.load(deep_graph_json_file)
         removed = graph.prune_at_level(2)
         # Should keep Root, A, B, A1, A2, B1, B2 (7 nodes), remove A1a, A1b (2 nodes)
-        assert len(removed) == 2
-        assert len(graph.nodes) == 7
+        assert len(removed) == 2  # noqa: PLR2004
+        assert len(graph.nodes) == 7  # noqa: PLR2004
         # A1 should now be a leaf
         assert graph.nodes[3].children == []
 
@@ -234,7 +235,7 @@ class TestPruneAtLevel:
         graph = Graph.load(deep_graph_json_file)
         removed = graph.prune_at_level(10)
         assert len(removed) == 0
-        assert len(graph.nodes) == 9
+        assert len(graph.nodes) == 9  # noqa: PLR2004
 
     def test_prune_negative_raises(self, deep_graph_json_file):
         graph = Graph.load(deep_graph_json_file)
@@ -248,7 +249,7 @@ class TestPruneAtLevel:
 class TestLoadGraphForPruning:
     def test_load_valid(self, deep_graph_json_file):
         graph = load_graph_for_pruning(deep_graph_json_file)
-        assert len(graph.nodes) == 9
+        assert len(graph.nodes) == 9  # noqa: PLR2004
 
     def test_file_not_found(self):
         with pytest.raises(FileNotFoundError):
@@ -267,8 +268,8 @@ class TestPruneGraphAtLevel:
         result = prune_graph_at_level(deep_graph_json_file, 1, output)
         assert Path(output).exists()
         assert result.operation == "level"
-        assert result.removed_count == 6
-        assert result.remaining_nodes == 3
+        assert result.removed_count == 6  # noqa: PLR2004
+        assert result.remaining_nodes == 3  # noqa: PLR2004
         assert result.output_path == output
 
     def test_prune_output_is_valid_graph(self, deep_graph_json_file, tmp_path):
@@ -276,7 +277,7 @@ class TestPruneGraphAtLevel:
         prune_graph_at_level(deep_graph_json_file, 1, output)
         # Should be loadable
         reloaded = Graph.load(output)
-        assert len(reloaded.nodes) == 3
+        assert len(reloaded.nodes) == 3  # noqa: PLR2004
 
     def test_auto_derived_filename(self, deep_graph_json_file):
         result = prune_graph_at_level(deep_graph_json_file, 2)
@@ -298,14 +299,14 @@ class TestPruneGraphByUuid:
         output = str(tmp_path / "pruned.json")
         result = prune_graph_by_uuid(deep_graph_json_file, "uuid-b1", output)
         assert result.removed_count == 1
-        assert result.remaining_nodes == 8
+        assert result.remaining_nodes == 8  # noqa: PLR2004
 
     def test_prune_subtree(self, deep_graph_json_file, tmp_path):
         output = str(tmp_path / "pruned.json")
         result = prune_graph_by_uuid(deep_graph_json_file, "uuid-a", output)
         # A + A1 + A2 + A1a + A1b = 5 removed
-        assert result.removed_count == 5
-        assert result.remaining_nodes == 4
+        assert result.removed_count == 5  # noqa: PLR2004
+        assert result.remaining_nodes == 4  # noqa: PLR2004
 
     def test_uuid_not_found(self, deep_graph_json_file, tmp_path):
         output = str(tmp_path / "pruned.json")
@@ -320,10 +321,13 @@ class TestPruneGraphByUuid:
 
 class TestDeriveOutputPath:
     def test_level_suffix(self):
-        assert _derive_output_path("/tmp/graph.json", "pruned_level2") == "/tmp/graph_pruned_level2.json"
+        assert (
+            _derive_output_path("/tmp/graph.json", "pruned_level2")  # noqa: S108
+            == "/tmp/graph_pruned_level2.json"  # noqa: S108
+        )
 
     def test_uuid_suffix(self):
-        assert _derive_output_path("/tmp/graph.json", "pruned") == "/tmp/graph_pruned.json"
+        assert _derive_output_path("/tmp/graph.json", "pruned") == "/tmp/graph_pruned.json"  # noqa: S108
 
 
 # --- CLI tests ---
@@ -390,4 +394,4 @@ class TestTopicPruneCLI:
         assert result.exit_code == 0
         # Original file should now have only 3 nodes
         reloaded = Graph.load(deep_graph_json_file)
-        assert len(reloaded.nodes) == 3
+        assert len(reloaded.nodes) == 3  # noqa: PLR2004

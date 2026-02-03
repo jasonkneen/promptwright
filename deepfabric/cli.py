@@ -2146,7 +2146,7 @@ def topic_inspect(
         # Show UUIDs for each leaf node
         deepfabric topic inspect topic_tree.jsonl --all --uuid
     """
-    from .topic_inspector import detect_format, inspect_topic_file  # noqa: PLC0415
+    from .topic_inspector import inspect_topic_file  # noqa: PLC0415
 
     tui = get_tui()
 
@@ -2198,15 +2198,12 @@ def _display_inspection_result(
     """Display inspection result using rich formatting."""
     from rich.panel import Panel  # noqa: PLC0415
     from rich.table import Table  # noqa: PLC0415
-    from rich.tree import Tree as RichTree  # noqa: PLC0415
-
-    from .topic_inspector import TopicInspectionResult  # noqa: PLC0415
 
     # Header with file info
     format_label = "Graph (JSON)" if result.format == "graph" else "Tree (JSONL)"
 
     tui.console.print()
-    tui.console.print(f"[bold cyan]Topic Inspector[/bold cyan]")
+    tui.console.print("[bold cyan]Topic Inspector[/bold cyan]")
     tui.console.print(f"[dim]{result.source_file}[/dim]")
     tui.console.print()
 
@@ -2221,7 +2218,7 @@ def _display_inspection_result(
 
     if result.metadata.get("root_topic"):
         root = result.metadata["root_topic"]
-        if len(root) > 60:
+        if len(root) > 60:  # noqa: PLR2004
             root = root[:57] + "..."
         stats_table.add_row("Root Topic:", root)
 
@@ -2316,11 +2313,11 @@ def _display_paths_as_table(tui: "DeepFabricTUI", paths: list[list[str]]) -> Non
 
     for i, path in enumerate(paths[:100], 1):
         path_str = " > ".join(path)
-        if len(path_str) > 80:
+        if len(path_str) > 80:  # noqa: PLR2004
             path_str = path_str[:77] + "..."
         table.add_row(str(i), path_str, str(len(path)))
 
-    if len(paths) > 100:
+    if len(paths) > 100:  # noqa: PLR2004
         table.add_row("...", f"[dim]{len(paths) - 100} more paths[/dim]", "")
 
     tui.console.print(table)
@@ -2356,7 +2353,9 @@ def _display_paths_as_tree(
         if topic_to_uuid and root_topic in topic_to_uuid:
             root_label += f" [dim](UUID: {topic_to_uuid[root_topic]})[/dim]"
         tree = RichTree(root_label)
-        _add_children_to_tree(tree, paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid)
+        _add_children_to_tree(
+            tree, paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid
+        )
         tui.console.print(tree)
     else:
         # Multiple roots - show each as a separate tree
@@ -2365,9 +2364,11 @@ def _display_paths_as_tree(
             if topic_to_uuid and root_topic in topic_to_uuid:
                 root_label += f" [dim](UUID: {topic_to_uuid[root_topic]})[/dim]"
             tree = RichTree(root_label)
-            _add_children_to_tree(tree, root_paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid)
+            _add_children_to_tree(
+                tree, root_paths, 1, path_to_uuid=path_to_uuid, topic_to_uuid=topic_to_uuid
+            )
             tui.console.print(tree)
-        if len(root_groups) > 20:
+        if len(root_groups) > 20:  # noqa: PLR2004
             tui.console.print(f"[dim]... and {len(root_groups) - 20} more topics[/dim]")
 
 
@@ -2413,9 +2414,11 @@ def _add_children_to_tree(
             child_node = parent.add(f"{child_topic} [dim](UUID: {uuid})[/dim]")
         else:
             child_node = parent.add(child_topic)
-        _add_children_to_tree(child_node, child_paths, depth + 1, max_depth, path_to_uuid, topic_to_uuid)
+        _add_children_to_tree(
+            child_node, child_paths, depth + 1, max_depth, path_to_uuid, topic_to_uuid
+        )
 
-    if len(children) > 20:
+    if len(children) > 20:  # noqa: PLR2004
         parent.add(f"[dim]... and {len(children) - 20} more siblings[/dim]")
 
 
@@ -2565,7 +2568,9 @@ def topic_prune(
         tui.console.print()
         tui.success("Graph pruned successfully")
         tui.console.print(f"  Removed:   {result.removed_count} nodes")
-        tui.console.print(f"  Remaining: {result.remaining_nodes} nodes, {result.remaining_paths} paths")
+        tui.console.print(
+            f"  Remaining: {result.remaining_nodes} nodes, {result.remaining_paths} paths"
+        )
         tui.console.print(f"  Saved to:  {result.output_path}")
 
     except FileNotFoundError as e:

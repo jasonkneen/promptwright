@@ -54,10 +54,8 @@ def detect_format(file_path: str) -> Literal["tree", "graph"]:
         # Try to parse as a complete JSON object (Graph format)
         try:
             data = json.loads(content)
-            if isinstance(data, dict):
-                # Graph format has "nodes" and "root_id" keys
-                if "nodes" in data and "root_id" in data:
-                    return "graph"
+            if isinstance(data, dict) and "nodes" in data and "root_id" in data:
+                return "graph"
         except json.JSONDecodeError:
             pass
 
