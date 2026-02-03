@@ -37,7 +37,7 @@ def load_config(  # noqa: PLR0913
     topics_save_as: str | None = None,
     output_save_as: str | None = None,
     include_system_message: bool | None = None,
-    mode: str = "tree",
+    mode: str | None = None,
     # Modular conversation configuration
     conversation_type: str | None = None,
     reasoning_style: str | None = None,
@@ -83,6 +83,8 @@ def load_config(  # noqa: PLR0913
         except Exception as e:
             raise ConfigurationError(f"Error loading config file: {str(e)}") from e
         else:
+            if mode is not None:
+                config.topics.mode = mode
             return config
 
     # No config file provided - create minimal configuration from CLI args
@@ -91,6 +93,9 @@ def load_config(  # noqa: PLR0913
 
     tui = get_tui()
     tui.info("No config file provided - using CLI parameters")
+
+    # Default to graph mode when no config file and no explicit mode
+    mode = mode or "graph"
 
     # Create minimal config dict with new structure
     default_prompt = generation_system_prompt or "You are a helpful AI assistant."

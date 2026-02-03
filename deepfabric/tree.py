@@ -83,6 +83,17 @@ class TreeConfig(BaseModel):
         default=None,
         description="Base URL for API endpoint (e.g., custom OpenAI-compatible servers)",
     )
+    max_concurrent: int = Field(
+        default=4,
+        ge=1,
+        le=20,
+        description="Maximum concurrent LLM calls during tree expansion (helps avoid rate limits)",
+    )
+    max_tokens: int = Field(
+        default=DEFAULT_MAX_TOKENS,
+        ge=1,
+        description="Maximum tokens for topic generation LLM calls",
+    )
 
 
 class TreeValidator:
@@ -148,6 +159,8 @@ class Tree(TopicModel):
         self.temperature = self.config.temperature
         self.provider = self.config.provider
         self.model_name = self.config.model_name
+        self.max_concurrent = self.config.max_concurrent
+        self.max_tokens = self.config.max_tokens
 
         # Initialize LLM client
         llm_kwargs = {}
@@ -300,7 +313,7 @@ class Tree(TopicModel):
                 prompt=prompt,
                 schema=TopicList,
                 max_retries=MAX_RETRY_ATTEMPTS,
-                max_tokens=DEFAULT_MAX_TOKENS,
+                max_tokens=self.max_tokens,
                 temperature=self.temperature,
             )
 
@@ -311,19 +324,11 @@ class Tree(TopicModel):
                 source="tree_generation",
             )
 
-            # Extract and validate subtopics
+            # Extract subtopics — accept whatever the LLM returned
             subtopics = topic_response.subtopics
-            if len(subtopics) >= num_subtopics:
-                return subtopics[:num_subtopics]
-
-            # If insufficient subtopics, pad with defaults
-            while len(subtopics) < num_subtopics:
-                subtopics.append(f"subtopic_{len(subtopics) + 1}_for_{node_path[-1]}")
-
             return subtopics[:num_subtopics]
 
         except Exception as e:
-            # Log the failure and return default subtopics
             self.failed_generations.append(
                 {
                     "node_path": node_path,
@@ -331,9 +336,7 @@ class Tree(TopicModel):
                     "timestamp": time.time(),
                 }
             )
-
-            # Generate default subtopics
-            return [f"subtopic_{i + 1}_for_{node_path[-1]}" for i in range(num_subtopics)]
+            return []
 
     def _detect_domain(self, system_prompt: str, node_path: list[str]) -> str:
         """Detect the appropriate domain for prompt examples based on context."""
@@ -405,20 +408,32 @@ class Tree(TopicModel):
             yield {"event": "leaf_reached", "path": node_path}
             return
 
-        async def _collect_child_events(child_subtopic: str) -> list[dict[str, Any]]:
-            child_path = node_path + [child_subtopic]
-            events: list[dict[str, Any]] = []
-            async for child_event in self._build_subtree_generator(
-                child_path, system_prompt, total_depth, n_child, current_depth + 1
-            ):
-                events.append(child_event)
-            return events
+        event_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        semaphore = asyncio.Semaphore(self.max_concurrent)
 
-        tasks = [asyncio.create_task(_collect_child_events(subtopic)) for subtopic in subtopics]
+        async def _expand_child(child_subtopic: str) -> None:
+            async with semaphore:
+                child_path = node_path + [child_subtopic]
+                async for child_event in self._build_subtree_generator(
+                    child_path, system_prompt, total_depth, n_child, current_depth + 1
+                ):
+                    await event_queue.put(child_event)
 
-        for child_events in await asyncio.gather(*tasks):
-            for child_event in child_events:
-                yield child_event
+        tasks = [asyncio.create_task(_expand_child(s)) for s in subtopics]
+
+        async def _signal_done() -> None:
+            await asyncio.gather(*tasks)
+            await event_queue.put(None)
+
+        done_task = asyncio.create_task(_signal_done())
+
+        while True:
+            event = await event_queue.get()
+            if event is None:
+                break
+            yield event
+
+        await done_task
 
     def save(self, save_path: str) -> None:
         """Save the topic tree to a file.

@@ -678,3 +678,123 @@ class TestIntegration:
             assert loaded.root.metadata["topic_hash"] == expected_hash
         finally:
             Path(temp_path).unlink()
+
+    def test_build_cross_connections_are_acyclic(self):
+        """Test that LLM cross-connections create a DAG, not cycles.
+
+        Cross-connections via _process_subtopics_response always go FROM existing
+        node TO new node (parent direction), so cycles cannot form during build.
+        """
+        from deepfabric.schemas import GraphSubtopic, GraphSubtopics  # noqa: PLC0415
+
+        graph_params = {
+            "topic_prompt": "Root",
+            "provider": "openai",
+            "model_name": "test-model",
+            "temperature": 0.7,
+            "degree": 2,
+            "depth": 2,
+        }
+        with patch("deepfabric.graph.LLMClient"):
+            graph = Graph(**graph_params)
+
+        # Depth 1: root (0) → A (1), B (2)
+        # Depth 2: A (1) → C (3) with connections=[0] (root also becomes parent of C)
+        #          B (2) → D (4)
+        graph.llm_client.generate_async = AsyncMock(
+            side_effect=[
+                GraphSubtopics(
+                    subtopics=[
+                        GraphSubtopic(topic="A", connections=[]),
+                        GraphSubtopic(topic="B", connections=[]),
+                    ]
+                ),
+                GraphSubtopics(
+                    subtopics=[
+                        GraphSubtopic(topic="C", connections=[0]),  # Root → C (extra parent)
+                    ]
+                ),
+                GraphSubtopics(
+                    subtopics=[
+                        GraphSubtopic(topic="D", connections=[]),
+                    ]
+                ),
+            ]
+        )
+
+        asyncio.run(_consume_async_iter(graph.build_async()))
+
+        # Cross-connections never create cycles — direction is always existing → new
+        assert graph.has_cycle() is False
+
+        # Cross-connection adds root as extra parent of C
+        node_c = next(n for n in graph.nodes.values() if n.topic == "C")
+        assert graph.root in node_c.parents
+        assert len(node_c.parents) == 2  # A and root  # noqa: PLR2004
+
+        # Multiple parents means C appears in paths from both root→A→C and root→C
+        paths = graph.get_all_paths()
+        c_paths = [p for p in paths if "C" in p]
+        assert len(c_paths) >= 2  # noqa: PLR2004
+
+    def test_manual_cycle_detection_and_path_traversal(self):
+        """Test that has_cycle detects manually-added cycles and path traversal doesn't hang."""
+        graph_params = {
+            "topic_prompt": "Root",
+            "model_name": "test-model",
+            "temperature": 0.5,
+            "degree": 2,
+            "depth": 2,
+        }
+        graph = Graph(**graph_params)
+
+        # root (0) → A (1) → B (2) → root (0)  — explicit cycle
+        node_a = graph.add_node("A")
+        node_b = graph.add_node("B")
+        graph.add_edge(0, node_a.id)
+        graph.add_edge(node_a.id, node_b.id)
+        graph.add_edge(node_b.id, 0)  # Back-edge creates cycle
+
+        assert graph.has_cycle() is True
+
+        # Path traversal uses visited set — must not infinite-loop
+        paths = graph.get_all_paths()
+        # B has children (root via cycle edge), so it's not a leaf in the normal sense,
+        # but root is already visited so the cycle is cut — no leaf exists beyond B
+        assert isinstance(paths, list)
+
+    def test_cycle_graph_save_load_roundtrip(self):
+        """Test that a graph with a cycle survives save/load roundtrip."""
+        graph_params = {
+            "topic_prompt": "Root",
+            "model_name": "test-model",
+            "temperature": 0.5,
+            "degree": 2,
+            "depth": 2,
+        }
+        graph = Graph(**graph_params)
+
+        # Build: root → A → B → root (cycle)
+        node_a = graph.add_node("A")
+        node_b = graph.add_node("B")
+        graph.add_edge(0, node_a.id)
+        graph.add_edge(node_a.id, node_b.id)
+        graph.add_edge(node_b.id, 0)  # Cycle back to root
+
+        assert graph.has_cycle() is True
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            temp_path = f.name
+
+        try:
+            graph.save(temp_path)
+            loaded = Graph.from_json(temp_path, graph_params)
+
+            assert len(loaded.nodes) == len(graph.nodes)
+            assert loaded.has_cycle() is True
+
+            # The cycle edge is preserved: root is in B's children
+            loaded_b = loaded.nodes[node_b.id]
+            assert any(child.id == 0 for child in loaded_b.children)
+        finally:
+            Path(temp_path).unlink()

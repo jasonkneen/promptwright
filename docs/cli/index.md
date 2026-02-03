@@ -30,6 +30,14 @@ DeepFabric's command-line interface provides a modular set of tools that support
 
     [:octicons-arrow-right-24: Reference](visualize.md)
 
+-   :material-file-tree: **topic**
+
+    ---
+
+    Topic structure inspection and pruning
+
+    [:octicons-arrow-right-24: Reference](topic.md)
+
 -   :material-cloud-upload: **upload-hf**
 
     ---

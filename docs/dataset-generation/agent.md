@@ -22,7 +22,7 @@ Agent mode is automatically enabled when tools are configured. Create complete t
 ```yaml title="config.yaml"
 topics:
   prompt: "Python Programming"
-  graph: tree
+  mode: graph             # tree | graph
   depth: 2
   degree: 3
 
