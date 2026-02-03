@@ -59,7 +59,7 @@ hide:
 
 For basic dataset generation, install DeepFabric with the default dependencies using the commands below.
 
-If you plan to use the training or evaluation utilities described in the [Training](training/) or [Evaluation](evaluation/) sections, install the `training` extra instead (e.g., `pip install "deepfabric[training]"`).
+If you plan to use the training or evaluation utilities described in the [Training](training/index.md) or [Evaluation](evaluation/index.md) sections, install the `training` extra instead (e.g., `pip install "deepfabric[training]"`).
 
 === "pip"
 
@@ -187,7 +187,7 @@ For more control over dataset generation, create a configuration file:
 ```yaml title="config.yaml"
 topics:
   prompt: "Machine learning fundamentals"
-  mode: tree
+  mode: graph            # or "tree" for JSONL format
   depth: 2
   degree: 3
 

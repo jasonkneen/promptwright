@@ -87,12 +87,13 @@ Controls topic tree/graph generation.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `prompt` | string | required | Root topic for generation |
-| `mode` | string | "tree" | Generation mode: tree or graph |
+| `mode` | string | "graph" | Generation mode: tree or graph |
 | `depth` | int | 2 | Hierarchy depth (1-10) |
 | `degree` | int | 3 | Subtopics per node (1-50) |
 | `max_concurrent` | int | 4 | Max concurrent LLM calls (graph mode only, 1-20) |
 | `prompt_style` | string | "default" | Graph expansion prompt style (graph mode only, see below) |
 | `system_prompt` | string | "" | Custom instructions for topic LLM |
+| `max_tokens` | int | 1000 | Max tokens for topic generation LLM calls |
 | `save_as` | string | - | Path to save topics JSONL |
 | `llm` | object | - | Override shared LLM settings |
 
@@ -118,6 +119,18 @@ topics:
   system_prompt: |
     Generate adversarial security test cases for AI assistant hardening.
 ```
+
+#### Failed Generation Tracking
+
+When topic generation encounters failures, sidecar files are created automatically:
+
+- **Tree mode**: `{save_as}_failed.jsonl` alongside the JSONL output
+- **Graph mode**: `{save_as}_failed.jsonl` alongside the JSON output
+
+These files contain error details for each failed generation attempt, useful for debugging provider issues or prompt problems.
+
+!!! tip "Truncation Detection"
+    DeepFabric detects truncated LLM responses ("EOF while parsing" errors) and suggests increasing `max_tokens` in the topic configuration.
 
 ### generation
 

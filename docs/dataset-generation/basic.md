@@ -14,7 +14,7 @@ Basic datasets generate simple question-answer pairs without reasoning traces or
 ```yaml title="config.yaml"
 topics:
   prompt: "Python programming fundamentals"
-  mode: tree
+  mode: graph             # tree | graph
   depth: 2
   degree: 2
 

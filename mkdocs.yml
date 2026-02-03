@@ -40,6 +40,10 @@ nav:
     - generate: cli/generate.md
     - validate: cli/validate.md
     - visualize: cli/visualize.md
+    - Topic Management:
+      - cli/topic.md
+      - topic inspect: cli/topic-inspect.md
+      - topic prune: cli/topic-prune.md
     - upload-hf: cli/upload-hf.md
     - upload-kaggle: cli/upload-kaggle.md
     - upload: cli/upload.md

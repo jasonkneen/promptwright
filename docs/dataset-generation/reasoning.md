@@ -14,7 +14,7 @@ Reasoning datasets include chain-of-thought traces that show how the model arriv
 ```yaml title="config.yaml"
 topics:
   prompt: "Mathematical problem solving"
-  mode: tree
+  mode: graph             # tree | graph
   depth: 2
   degree: 3
 

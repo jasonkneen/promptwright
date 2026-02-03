@@ -65,16 +65,16 @@ deepfabric generate config.yaml --topics-load existing_topics.jsonl
 
 Generate and save only the topic structure without proceeding to dataset creation:
 
-=== "Tree Mode"
+=== "Graph Mode (Default)"
 
     ```bash
     deepfabric generate config.yaml --topic-only
     ```
 
-=== "Graph Mode"
+=== "Tree Mode"
 
     ```bash
-    deepfabric generate config.yaml --mode graph --topic-only
+    deepfabric generate config.yaml --mode tree --topic-only
     ```
 
 The `--topic-only` flag stops the pipeline after topic generation and saves the topic structure to the configured location.
@@ -299,3 +299,20 @@ python -m json.tool your_dataset.jsonl > /dev/null
 # Count generated examples
 wc -l your_dataset.jsonl
 ```
+
+## Topic Inspection
+
+After generating topics, explore and refine the structure before dataset generation:
+
+```bash title="Inspect and prune workflow"
+# Explore the topic structure
+deepfabric topic inspect topics.json --level 1 --expand
+
+# Preview what pruning would remove
+deepfabric topic prune topics.json --level 2 --dry-run
+
+# Prune and save to new file
+deepfabric topic prune topics.json --level 2 -o pruned_topics.json
+```
+
+See [topic inspect](topic-inspect.md) and [topic prune](topic-prune.md) for full details.
