@@ -70,6 +70,11 @@ class GraphConfig(BaseModel):
         le=20,
         description="Maximum concurrent LLM calls during graph expansion (helps avoid rate limits)",
     )
+    max_tokens: int = Field(
+        default=DEFAULT_MAX_TOKENS,
+        ge=1,
+        description="Maximum tokens for topic generation LLM calls",
+    )
     base_url: str | None = Field(
         default=None,
         description="Base URL for API endpoint (e.g., custom OpenAI-compatible servers)",
@@ -156,6 +161,7 @@ class Graph(TopicModel):
         self.degree = self.config.degree
         self.depth = self.config.depth
         self.max_concurrent = self.config.max_concurrent
+        self.max_tokens = self.config.max_tokens
         self.prompt_style = self.config.prompt_style
 
         # Initialize LLM client
@@ -617,7 +623,7 @@ class Graph(TopicModel):
                     prompt=prompt,
                     schema=GraphSubtopics,
                     max_retries=1,  # Don't retry inside - we handle it here
-                    max_tokens=DEFAULT_MAX_TOKENS,
+                    max_tokens=self.max_tokens,
                     temperature=self.temperature,
                 )
 

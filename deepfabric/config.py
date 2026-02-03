@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .constants import (
     DEFAULT_MAX_RETRIES,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
     DEFAULT_SAMPLE_RETRIES,
@@ -108,6 +109,11 @@ class TopicsConfig(BaseModel):
         ge=1,
         le=20,
         description="Maximum concurrent LLM calls during graph expansion (helps avoid rate limits)",
+    )
+    max_tokens: int = Field(
+        default=DEFAULT_MAX_TOKENS,
+        ge=1,
+        description="Maximum tokens for topic generation LLM calls",
     )
     save_as: str | None = Field(default=None, description="Where to save the generated topics")
     prompt_style: Literal["default", "isolated", "anchored"] = Field(
@@ -589,6 +595,7 @@ See documentation for full examples.
             "depth": self.topics.depth,
             "degree": self.topics.degree,
             "max_concurrent": self.topics.max_concurrent,
+            "max_tokens": self.topics.max_tokens,
             "prompt_style": self.topics.prompt_style,
         }
 
