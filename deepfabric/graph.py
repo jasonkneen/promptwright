@@ -376,6 +376,13 @@ class Graph(TopicModel):
         with open(save_path, "w") as f:
             f.write(self.to_json())
 
+        # Save failed generations if any
+        if self.failed_generations:
+            failed_path = save_path.replace(".json", "_failed.jsonl")
+            with open(failed_path, "w") as f:
+                for failed in self.failed_generations:
+                    f.write(json.dumps({"failed_generation": failed}) + "\n")
+
     @classmethod
     def from_json(cls, json_path: str, params: dict) -> "Graph":
         """Load a topic graph from a JSON file."""
