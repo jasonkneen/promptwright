@@ -90,6 +90,19 @@ async def _process_graph_events(graph: Graph, debug: bool = False) -> dict | Non
                 tui.finish_building(failed_generations)
                 final_event = event
 
+                if failed_generations > 0 and hasattr(graph, "failed_generations"):
+                    truncated = sum(
+                        1
+                        for f in graph.failed_generations
+                        if "EOF while parsing" in f.get("last_error", "")
+                    )
+                    if truncated:
+                        get_tui().warning(
+                            f"Hint: {truncated} of {failed_generations} failures appear to be "
+                            f"truncated responses. Consider increasing max_tokens "
+                            f"(currently {graph.max_tokens})."
+                        )
+
                 if debug and failed_generations > 0 and hasattr(graph, "failed_generations"):
                     get_tui().error("\nDebug: Graph generation failures:")
                     for idx, failure in enumerate(graph.failed_generations, 1):
@@ -146,6 +159,19 @@ async def _process_tree_events(tree: Tree, debug: bool = False) -> dict | None:
                 )
                 tui.finish_building(total_paths, failed_generations)
                 final_event = event
+
+                if failed_generations > 0 and hasattr(tree, "failed_generations"):
+                    truncated = sum(
+                        1
+                        for f in tree.failed_generations
+                        if "EOF while parsing" in f.get("error", "")
+                    )
+                    if truncated:
+                        get_tui().warning(
+                            f"Hint: {truncated} of {failed_generations} failures appear to be "
+                            f"truncated responses. Consider increasing max_tokens "
+                            f"(currently {tree.max_tokens})."
+                        )
 
                 if debug and failed_generations > 0 and hasattr(tree, "failed_generations"):
                     get_tui().error("\nDebug: Tree generation failures:")
@@ -313,6 +339,9 @@ def save_topic_model(
         try:
             tree_save_path = topics_save_as or config.topics.save_as or "topic_tree.jsonl"
             topic_model.save(tree_save_path)
+            if getattr(topic_model, "failed_generations", None):
+                failed_path = tree_save_path.replace(".jsonl", "_failed.jsonl")
+                tui.warning(f"Failed generations saved to: {failed_path}")
             tui.success(f"Topic tree saved to {tree_save_path}")
             tui.info(f"Total paths: {len(topic_model.tree_paths)}")
         except Exception as e:
@@ -322,6 +351,9 @@ def save_topic_model(
         try:
             graph_save_path = topics_save_as or config.topics.save_as or "topic_graph.json"
             topic_model.save(graph_save_path)
+            if getattr(topic_model, "failed_generations", None):
+                failed_path = graph_save_path.replace(".json", "_failed.jsonl")
+                tui.warning(f"Failed generations saved to: {failed_path}")
             tui.success(f"Topic graph saved to {graph_save_path}")
         except Exception as e:
             raise ConfigurationError(f"Error saving topic graph: {str(e)}") from e
