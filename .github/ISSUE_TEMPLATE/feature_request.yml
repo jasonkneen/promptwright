@@ -1,46 +1,63 @@
-name: Feature request ⛰️
-description: Suggest an idea for this project
-labels: ['enhancement']
+name: Feature request
+description: Suggest something for DeepFabric to support or do better
+labels: ["enhancement", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for suggesting this feature!
-  - type: checkboxes
-    id: new-feature
+        Feature requests are welcome. The more you can tell us about the use case behind the request, the better.
+
+  - type: textarea
+    id: problem
     attributes:
-      label: Is there an existing issue or pull request for this?
-      description: Please search to see if an issue or pull request already exists for the feature you desire.
+      label: What's missing or not working for you?
+      description: Describe the situation where DeepFabric falls short today.
+      placeholder: "When generating agent datasets, there's no way to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like DeepFabric to do?
+      description: Your idea for how DeepFabric could address this — a new config option, dataset type, CLI command, output format, anything.
+      placeholder: "It would be useful if the config supported..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: Workarounds you've considered, or other tools you've looked at for this.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this relate to?
       options:
-        - label: I have searched the existing issues and pull requests
-          required: true
-  - type: textarea
-    id: feature-description
+        - Dataset generation
+        - Topic graph / diversity
+        - Tool execution (Spin / VFS)
+        - Training utilities
+        - Evaluation
+        - CLI / config
+        - Output formats
+        - Provider support
+        - Other
+
+  - type: dropdown
+    id: priority-signal
     attributes:
-      label: Feature description
-      description: Is your feature request related to a problem? Please describe.
-      placeholder: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
-    validations:
-      required: true
+      label: How is this blocking you?
+      options:
+        - It's blocking production use of DeepFabric
+        - It's slowing down my evaluation of DeepFabric
+        - It would be a nice improvement but I have a workaround
+        - Just an idea — low urgency
+
   - type: textarea
-    id: desired-solution
-    attributes:
-      label: Desired solution
-      description: Describe the solution you'd like.
-      placeholder: A clear and concise description of what you want to happen.
-    validations:
-      required: true
-  - type: textarea
-    id: alternatives-considered
-    attributes:
-      label: Alternatives considered
-      description: Describe alternatives you've considered.
-      placeholder: A clear and concise description of any alternative solutions or features you've considered.
-    validations:
-      required: true
-  - type: textarea
-    id: additional-context
+    id: context
     attributes:
       label: Additional context
-      description: Do you want to share any additional context about this feature?
-      placeholder: Add any other context about the feature here.
+      description: What you're building, the model you're training, or anything else relevant to the request.

@@ -1,0 +1,99 @@
+name: Onboarding / setup issue
+description: You couldn't get DeepFabric installed or running for the first time
+labels: ["onboarding", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Couldn't get DeepFabric working? We want to know about it — these reports directly improve the setup experience for everyone.
+
+        If you hit an error after DeepFabric was already working, use the **Bug report** template instead.
+
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Where did you get stuck?
+      description: Pick the furthest step you reached before things went wrong.
+      options:
+        - Installation (`pip install deepfabric` or `uv add deepfabric`)
+        - Provider / API key setup
+        - First `deepfabric generate` command
+        - Writing a config file
+        - Dataset generated but output looks wrong
+        - Something else (describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you try and what went wrong?
+      placeholder: "I followed the quickstart and ran `deepfabric generate` but got..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Error message or output
+      description: Paste the exact error or output you saw.
+      render: shell
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install DeepFabric?
+      options:
+        - pip install deepfabric
+        - uv add deepfabric
+        - pip install "deepfabric[training]"
+        - Cloned from GitHub and uv sync
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: LLM provider you were trying to use
+      options:
+        - OpenAI
+        - Anthropic
+        - Google Gemini
+        - Ollama (local)
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.11.4 — run `python --version`"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (specify in additional context)
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs-used
+    attributes:
+      label: What documentation or guide were you following?
+      placeholder: "https://docs.deepfabric.dev/..."
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Environment details (venv, conda, uv), what you were trying to generate, or any other relevant context.
