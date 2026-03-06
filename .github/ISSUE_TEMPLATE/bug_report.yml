@@ -1,69 +1,118 @@
-name: Bug report 🐛
-description: Report a bug to help us improve
-labels: ['bug']
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
-  - type: checkboxes
-    id: new-bug
-    attributes:
-      label: Is there an existing issue for this?
-      description: Please search to see if an issue already exists for the bug you encountered.
-      options:
-        - label: I have searched the existing issues
-          required: true
+        Thanks for taking the time to report a bug. The more detail you can give us, the faster we can fix it.
+        
+        **Remove any API keys before posting.**
+
   - type: textarea
-    id: bug-description
+    id: description
     attributes:
-      label: Description of the bug
-      description: Tell us what bug you encountered and what should have happened.
+      label: What happened?
+      description: A clear description of what went wrong.
+      placeholder: "When I run `deepfabric generate config.yaml`, it exits with..."
     validations:
       required: true
+
   - type: textarea
-    id: steps-to-reproduce
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: "I expected a dataset to be generated at the output path specified..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
     attributes:
       label: Steps to reproduce
-      description: Steps to reproduce the behavior.
+      description: Minimal steps to reproduce. Include the exact command or config you used.
       placeholder: |
-        Please tell us how to reproduce this bug, for example:
-        1. Install dependencies with 'uv pip install -r requirements.txt'
-        2. Run the script with 'python main.py ...'
-        3. Use the following configuration options, if any
-        4. Observe the error
+        1. Create config.yaml with...
+        2. Run `deepfabric generate config.yaml`
+        3. See error
     validations:
       required: true
+
   - type: textarea
-    id: expected-behavior
+    id: config
     attributes:
-      label: Expected behavior
-      description: What should be the expected behavior.
-      placeholder: A clear and concise description of what you expected to happen.
+      label: Config file or CLI command
+      description: Paste your config.yaml or the exact CLI command you ran. Remove any API keys before posting.
+      render: yaml
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Paste any error messages or stack traces here.
+      render: shell
+
+  - type: input
+    id: deepfabric-version
+    attributes:
+      label: DeepFabric version
+      placeholder: "e.g. 0.3.1 — run `deepfabric info`"
     validations:
       required: true
-  - type: textarea
-    id: screenshots
+
+  - type: dropdown
+    id: provider
     attributes:
-      label: Screenshots / Logs
-      description: If applicable, add screenshots to help explain your problem.
-      placeholder: Paste your screenshots here.
-  - type: textarea
-    id: software-info
-    attributes:
-      label: Software information
-      description: |
-        Please provide the following information about your environment.
-        Run `deepfabric --version` to get the DeepFabric version.
-      value: |
-        - Operating system:
-        - Python version:
-        - DeepFabric version:
+      label: LLM provider
+      options:
+        - OpenAI
+        - Anthropic
+        - Google Gemini
+        - Ollama (local)
+        - Other (specify in additional context)
     validations:
       required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: "e.g. gpt-4o, claude-3.5-sonnet, gemini-1.5-flash"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dataset-type
+    attributes:
+      label: Dataset type
+      options:
+        - Basic
+        - Reasoning
+        - Agent
+        - Not applicable
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.11.4 — run `python --version`"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (specify in additional context)
+    validations:
+      required: true
+
   - type: textarea
-    id: additional-context
+    id: context
     attributes:
       label: Additional context
-      description: Do you want to share any additional context about this bug?
-      placeholder: Add any other context about the problem here.
+      description: Anything else that might be relevant — install method, environment (venv, conda, uv), or what you were trying to generate.
