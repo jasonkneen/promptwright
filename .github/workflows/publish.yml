@@ -13,6 +13,7 @@ jobs:
       url: https://pypi.org/p/deepfabric
     permissions:
       id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
